@@ -114,14 +114,14 @@ docs/
 ├── arquitectura/
 │   ├── general.md                        stack y capas
 │   └── diagramas/
-│       ├── casos-uso.drawio              fuente editable
-│       └── casos-uso.png                 exportación liviana
+│       └── casos-uso.drawio              fuente editable
 ├── plantillas/
 │   ├── spec.md
 │   └── plan.md
 └── proceso/
     ├── control-cambios.md                registro SC-<n>
-    └── estructura-repositorio.md         este documento
+    ├── estructura-repositorio.md         este documento
+    └── guia-sdd.md                       cómo usar spec y plan (SDD)
 ```
 
 | Carpeta | Pregunta que responde | Alcance de commit |
@@ -141,7 +141,7 @@ Reglas:
 - **Un caso de uso = una carpeta** en `features/`, con `spec.md` y `plan.md` y nada más. Si un caso de uso necesita un diagrama propio, va en `features/<cu>/diagramas/`.
 - **Nada suelto en `features/`.** Un documento que hable de varios casos de uso no es de una feature: va en `requisitos/` (si es qué) o en `arquitectura/` (si es cómo).
 - **El ID del caso de uso no cambia** aunque cambie su nombre; si cambia el nombre, se renombra la carpeta en un commit `refactor` que solo mueve.
-- **Todo diagrama** se sube con su fuente editable (`.drawio`, `.puml`) y una exportación (`.png` o `.svg`) de máximo 1 MB con el mismo nombre base.
+- **Los diagramas se suben solo como fuente editable** (`.drawio`, `.puml`), sin exportaciones `.png` o `.svg`: se ven abriéndolos en draw.io o en la extensión del editor, y así no hay una imagen desactualizada respecto a su fuente.
 - **`enunciado/` no se edita.** Los cambios de alcance se registran en `proceso/control-cambios.md`.
 - **Las entregas al docente se identifican con tags de Git** (`v1.0.0`), no con carpetas de copias. Si una entrega exige un PDF, se adjunta al release de GitHub.
 
@@ -153,9 +153,9 @@ Reglas:
 | `docs/specs/features/modulo3/...` | Tres niveles que no aportan: el repo ya es del Módulo 3 | `docs/features/` |
 | `docs/specs/features/modulo3/plan/General.md` | La arquitectura de todo el sistema dentro de las features | `docs/arquitectura/general.md` |
 | `docs/specs/features/modulo3/CAMBIOS.md` | Registro de cambios dentro de los specs | `docs/proceso/control-cambios.md` |
-| `docs/specs/templates/` con `sdd-guide.MD` | Plantillas mezcladas con specs; extensión en mayúsculas | `docs/plantillas/` |
+| `docs/specs/templates/` con `sdd-guide.MD` | Plantillas mezcladas con specs; la guía no es una plantilla; extensión en mayúsculas | Plantillas en `docs/plantillas/`, guía en `docs/proceso/guia-sdd.md` |
 | `AVICONTROL.md` en la raíz y en `docs/` | Archivo duplicado | Solo en `docs/enunciado/` |
-| `docs/diagramas/Modulo3_v1.png` de 3,5 MB | Versión en el nombre y archivo pesado | `docs/arquitectura/diagramas/`, sin versión en el nombre, ≤ 1 MB |
+| `docs/diagramas/Modulo3_v1.drawio` + `.png` de 3,5 MB | Versión en el nombre; imagen pesada que duplica la fuente | Solo `docs/arquitectura/diagramas/casos-uso.drawio` |
 
 ---
 
@@ -349,7 +349,7 @@ frontend/
 | Datos simulados de M1/M2 para pruebas | `backend/src/test/resources/fixtures/m1/`, `.../m2/` | Sí |
 | Imágenes e íconos de la interfaz | `frontend/src/shared/` si se importan desde código; `frontend/public/` si no | Sí |
 | Reportes Excel generados | Se generan en memoria y se descargan por la API | **No** |
-| Diagramas | `docs/arquitectura/diagramas/` o `docs/features/<cu>/diagramas/` | Sí (fuente + exportación ≤ 1 MB) |
+| Diagramas | `docs/arquitectura/diagramas/` o `docs/features/<cu>/diagramas/` | Sí, solo la fuente (`.drawio`, `.puml`) |
 | Compilados (`backend/target/`, `frontend/dist/`), `node_modules/`, IDE (`.idea/`, `.vscode/`), logs | — | **No** |
 | Dependencias exactas del frontend | `frontend/package-lock.json` | **Sí** |
 
