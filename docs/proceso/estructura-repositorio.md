@@ -100,11 +100,10 @@ docs/
 ├── enunciado/
 │   └── AVICONTROL.md                     enunciado del docente (no se edita)
 ├── requisitos/                           lo que aplica a TODO el módulo
-│   ├── glosario.md
-│   ├── reglas-transversales.md
-│   └── criterios-aceptacion.md
+│   ├── especificacion-general.md         épica: glosario, reglas transversales, mapa de CU
+│   └── diccionario.md                    diccionario de dominio y de datos
 ├── features/                             SOLO carpetas de casos de uso
-│   ├── m3-cu01-lista-galpones/
+│   ├── m3-cu01-lista-lotes/
 │   │   ├── spec.md                       qué se construye
 │   │   └── plan.md                       cómo se construye
 │   ├── m3-cu03-generar-liquidacion/
@@ -127,14 +126,12 @@ docs/
 | Carpeta | Pregunta que responde | Alcance de commit |
 |---|---|---|
 | `enunciado/` | ¿Qué pidió el docente? | `docs` |
-| `requisitos/` | ¿Qué reglas aplican a todo el módulo? (glosario, reglas transversales, criterios globales, supuestos) | `docs(requisitos)` |
+| `requisitos/` | ¿Qué reglas aplican a todo el módulo? (glosario, reglas transversales, criterios globales, diccionario de datos) | `docs(requisitos)` |
 | `features/<cu>/spec.md` | ¿Qué debe hacer este caso de uso? | `docs(requisitos)` |
 | `features/<cu>/plan.md` | ¿Cómo se implementa este caso de uso? | `docs(plan)` |
 | `arquitectura/` | ¿Con qué y cómo se construye todo el sistema? | `docs(diseno)` |
 | `plantillas/` | ¿Qué molde copio para un spec o plan nuevo? | `docs` |
 | `proceso/` | ¿Cómo trabaja el equipo? | `docs(cambios)` para el registro, `docs` para el resto |
-
-Los nombres de archivo dentro de `requisitos/` son ejemplos: se crean cuando haya contenido para ellos.
 
 Reglas:
 
@@ -149,7 +146,7 @@ Reglas:
 
 | Antes | Problema | Ahora |
 |---|---|---|
-| `docs/specs/features/modulo3/spec.md` junto a las carpetas de CU | Un documento de todo el módulo mezclado con las features | Su contenido se reparte en `docs/requisitos/` |
+| `docs/specs/features/modulo3/spec.md` junto a las carpetas de CU | Un documento de todo el módulo mezclado con las features | `docs/requisitos/especificacion-general.md` |
 | `docs/specs/features/modulo3/...` | Tres niveles que no aportan: el repo ya es del Módulo 3 | `docs/features/` |
 | `docs/specs/features/modulo3/plan/General.md` | La arquitectura de todo el sistema dentro de las features | `docs/arquitectura/general.md` |
 | `docs/specs/features/modulo3/CAMBIOS.md` | Registro de cambios dentro de los specs | `docs/proceso/control-cambios.md` |
