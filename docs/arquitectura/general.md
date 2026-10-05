@@ -132,13 +132,14 @@ Contiene los adaptadores concretos:
 erDiagram
     galpon ||--o{ lote : alberga
     galpon ||--o{ alerta_vaciado_sanitario : genera
-    alerta_vaciado_sanitario }o--|| lote : referencia
+    alerta_vaciado_sanitario |o--|| lote : referencia
+    registro_sincronizacion ||--o{ alerta_vaciado_sanitario : importa
     lote ||--o{ resultado_final_sacrificio : produce
     lote ||--o{ partida_alimento_lote : consume
     lote ||--o{ consumo_medicamento_lote : requiere
     consumo_medicamento_lote ||--o{ tramo_recepcion_consumo : desglosa
 
-    lote ||--o| liquidacion : liquida
+    lote ||--o{ liquidacion : liquida
     resultado_final_sacrificio ||--o| liquidacion : consolida
     liquidacion ||--o{ partida_costo_lote : congela
     liquidacion ||--o{ snapshot_datos_origen : documenta
@@ -161,6 +162,7 @@ erDiagram
         int poblacion_inicial
         int poblacion_actual
         bigint costo_total_cop
+        string estado
         timestamp fecha_hora_sync
     }
 
@@ -169,6 +171,7 @@ erDiagram
         uuid id_galpon FK
         uuid id_lote FK
         timestamp fecha_hora_evento
+        bigint id_registro_sincronizacion FK
     }
 
     liquidacion {
@@ -224,7 +227,8 @@ erDiagram
 ```
 
 > **Nota — Restricciones UNIQUE**: Mermaid `erDiagram` no admite múltiples calificadores en un atributo. Las siguientes restricciones existen en el DDL aunque no se representan con `UK` en el diagrama:
-> - `liquidacion.id_lote` → `CONSTRAINT uq_lote_activa UNIQUE (id_lote)` — máximo una Liquidación `ACTIVA` por lote.
+> - `alerta_vaciado_sanitario.id_lote` → `UNIQUE` — una sola alerta de vaciado sanitario por lote.
+> - `liquidacion.id_lote` → índice único parcial `uq_lote_activa` (`WHERE estado = 'ACTIVA'`) — máximo una Liquidación `ACTIVA` por lote; las `ANULADA` no cuentan, así que el lote admite una nueva Liquidación tras la anulación (CU03.FR-008, CU04.FR-007).
 > - `registro_anulacion.id_liquidacion` → `UNIQUE` — una sola anulación por Liquidación.
 
 ---
@@ -260,15 +264,16 @@ CREATE TABLE lote (
     poblacion_inicial  INT NOT NULL,
     poblacion_actual   INT NOT NULL,
     costo_total_cop    BIGINT NOT NULL,
+    estado             VARCHAR(30) NOT NULL,
     fecha_hora_sync    TIMESTAMP NOT NULL
 );
 
 CREATE TABLE alerta_vaciado_sanitario (
-    id_alerta        UUID PRIMARY KEY,
-    id_galpon        UUID NOT NULL REFERENCES galpon(id_galpon),
-    id_lote          UUID NOT NULL REFERENCES lote(id_lote),
-    fecha_hora_evento TIMESTAMP NOT NULL,
-    fecha_hora_sync   TIMESTAMP NOT NULL
+    id_alerta                  UUID PRIMARY KEY,
+    id_galpon                  UUID NOT NULL REFERENCES galpon(id_galpon),
+    id_lote                    UUID NOT NULL UNIQUE REFERENCES lote(id_lote),
+    fecha_hora_evento          TIMESTAMP NOT NULL,
+    id_registro_sincronizacion BIGINT NOT NULL REFERENCES registro_sincronizacion(id)
 );
 
 CREATE TABLE resultado_final_sacrificio (
@@ -347,9 +352,11 @@ CREATE TABLE liquidacion (
     utilidad_neta_cop   BIGINT NOT NULL,
     estado              VARCHAR(10) NOT NULL DEFAULT 'ACTIVA',
     fecha_hora_generacion TIMESTAMP NOT NULL,
-    usuario_responsable VARCHAR(100) NOT NULL,
-    CONSTRAINT uq_lote_activa UNIQUE (id_lote)
+    usuario_responsable VARCHAR(100) NOT NULL
 );
+
+-- Máximo una Liquidación ACTIVA por lote; las ANULADA se conservan y no bloquean una nueva
+CREATE UNIQUE INDEX uq_lote_activa ON liquidacion(id_lote) WHERE estado = 'ACTIVA';
 
 CREATE TABLE partida_costo_lote (
     id_partida          BIGSERIAL PRIMARY KEY,
@@ -390,7 +397,6 @@ ADD CONSTRAINT fk_aviso_liquidacion FOREIGN KEY (id_liquidacion) REFERENCES liqu
 
 -- Índices de rendimiento para consultas y joins por lote y galpón
 CREATE INDEX idx_lote_galpon ON lote(id_galpon);
-CREATE INDEX idx_alerta_vaciado_lote ON alerta_vaciado_sanitario(id_lote);
 CREATE INDEX idx_alerta_vaciado_galpon ON alerta_vaciado_sanitario(id_galpon);
 CREATE INDEX idx_sacrificio_lote ON resultado_final_sacrificio(id_lote);
 CREATE INDEX idx_partida_alimento_lote ON partida_alimento_lote(id_lote);

@@ -16,7 +16,7 @@ Este plan cubre el núcleo de dominio del Módulo 3: la **generación inmutable 
 
 **Anulación (CU04)**: Se inicia exclusivamente desde la vista de una Liquidación `ACTIVA`. Requiere motivo justificado (10-500 caracteres), confirmación explícita y opera en transacción atómica. Preserva el registro histórico sin borrar filas y rehabilita el lote para una nueva liquidación.
 
-Calcula Venta Bruta, Mortalidad del Lote, Costos Operativos y Utilidad Neta con redondeo `HALF_UP` a enteros COP y 2 decimales para porcentajes. Bloquea duplicados activos (`CONSTRAINT uq_lote_activa`).
+Calcula Venta Bruta, Mortalidad del Lote, Costos Operativos y Utilidad Neta con redondeo `HALF_UP` a enteros COP y 2 decimales para porcentajes. Bloquea duplicados activos (índice único parcial `uq_lote_activa`).
 
 ## Technical Context
 
@@ -48,9 +48,10 @@ CREATE TABLE liquidacion (
     estado              VARCHAR(10) NOT NULL DEFAULT 'ACTIVA',
     fecha_hora_generacion TIMESTAMP NOT NULL,
     usuario_responsable VARCHAR(100) NOT NULL,
-    CONSTRAINT chk_estado CHECK (estado IN ('ACTIVA', 'ANULADA')),
-    CONSTRAINT uq_lote_activa UNIQUE (id_lote)  -- solo una ACTIVA por lote
+    CONSTRAINT chk_estado CHECK (estado IN ('ACTIVA', 'ANULADA'))
 );
+
+CREATE UNIQUE INDEX uq_lote_activa ON liquidacion(id_lote) WHERE estado = 'ACTIVA';  -- solo una ACTIVA por lote
 ```
 
 ---
