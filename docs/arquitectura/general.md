@@ -193,7 +193,7 @@ erDiagram
     partida_costo_lote {
         bigint id_partida PK
         bigint id_liquidacion FK
-        uuid id_lote
+        uuid id_lote FK
         string categoria
         string concepto
         numeric cantidad
@@ -383,6 +383,22 @@ CREATE TABLE registro_anulacion (
     fecha_hora_anulacion  TIMESTAMP NOT NULL,
     usuario_responsable   VARCHAR(100) NOT NULL
 );
+
+-- FK diferida desde aviso_utilizacion_resultado (tabla creada en V1)
+ALTER TABLE aviso_utilizacion_resultado
+ADD CONSTRAINT fk_aviso_liquidacion FOREIGN KEY (id_liquidacion) REFERENCES liquidacion(id_liquidacion);
+
+-- Índices de rendimiento para consultas y joins por lote y galpón
+CREATE INDEX idx_lote_galpon ON lote(id_galpon);
+CREATE INDEX idx_alerta_vaciado_lote ON alerta_vaciado_sanitario(id_lote);
+CREATE INDEX idx_alerta_vaciado_galpon ON alerta_vaciado_sanitario(id_galpon);
+CREATE INDEX idx_sacrificio_lote ON resultado_final_sacrificio(id_lote);
+CREATE INDEX idx_partida_alimento_lote ON partida_alimento_lote(id_lote);
+CREATE INDEX idx_consumo_med_lote ON consumo_medicamento_lote(id_lote);
+CREATE INDEX idx_partida_costo_lote ON partida_costo_lote(id_lote);
+CREATE INDEX idx_snapshot_lote ON snapshot_datos_origen(id_lote);
+CREATE INDEX idx_liquidacion_lote ON liquidacion(id_lote);
+CREATE INDEX idx_liquidacion_fecha ON liquidacion(fecha_hora_generacion DESC);
 ```
 
 ---
@@ -429,16 +445,80 @@ CREATE TABLE registro_anulacion (
 
 ## Formato Estándar de Errores de API REST (RFC 7807 `ProblemDetail`)
 
+Todos los endpoints de M3 responden con la estructura estandarizada RFC 7807 (`application/problem+json`) ante cualquier fallo HTTP:
+
+#### 1. HTTP 400 Bad Request (Error de Validación de Entrada)
+```json
+{
+  "type": "https://avicontrol.edu.co/errors/validacion",
+  "title": "Error de validación",
+  "status": 400,
+  "detail": "La solicitud contiene parámetros inválidos.",
+  "instance": "/api/v1/liquidaciones",
+  "timestamp": "2026-10-05T14:30:00-05:00",
+  "errores": [
+    { "campo": "precioKgCop", "mensaje": "El precio por kg debe ser un número positivo mayor que cero." },
+    { "campo": "usuario", "mensaje": "El usuario responsable es obligatorio." }
+  ]
+}
+```
+
+#### 2. HTTP 401 Unauthorized (No Autenticado)
+```json
+{
+  "type": "https://avicontrol.edu.co/errors/no-autenticado",
+  "title": "No autenticado",
+  "status": 401,
+  "detail": "Token JWT ausente o expirado. Debe iniciar sesión.",
+  "instance": "/api/v1/liquidaciones",
+  "timestamp": "2026-10-05T14:30:00-05:00"
+}
+```
+
+#### 3. HTTP 403 Forbidden (Sin Permiso)
+```json
+{
+  "type": "https://avicontrol.edu.co/errors/sin-permiso",
+  "title": "Acceso denegado",
+  "status": 403,
+  "detail": "El usuario no posee el rol 'ROLE_ADMINISTRADOR_FINANCIERO' requerido.",
+  "instance": "/api/v1/liquidaciones/42/anulacion",
+  "timestamp": "2026-10-05T14:30:00-05:00"
+}
+```
+
+#### 4. HTTP 404 Not Found (Recurso Inexistente)
+```json
+{
+  "type": "https://avicontrol.edu.co/errors/liquidacion-no-encontrada",
+  "title": "Recurso no encontrado",
+  "status": 404,
+  "detail": "No se encontró la liquidación con ID 99.",
+  "instance": "/api/v1/liquidaciones/99",
+  "timestamp": "2026-10-05T14:30:00-05:00"
+}
+```
+
+#### 5. HTTP 409 Conflict (Conflicto de Regla de Negocio)
 ```json
 {
   "type": "https://avicontrol.edu.co/errors/liquidacion-ya-existente",
   "title": "Conflicto de Liquidación",
   "status": 409,
-  "detail": "El lote 98765432-e89b-12d3-a456-426614174000 ya cuenta con una liquidación en estado ACTIVA (ID: 1045).",
+  "detail": "El lote 98765432-e89b-12d3-a456-426614174000 ya cuenta con una liquidación en estado ACTIVA (ID: 1045). Anúlela antes de generar una nueva.",
   "instance": "/api/v1/liquidaciones",
-  "timestamp": "2026-10-02T16:00:00Z"
+  "timestamp": "2026-10-05T14:30:00-05:00"
 }
 ```
+
+---
+
+## Reglas Financieras y de Dominio
+
+> **★ Regla Contable: Utilidad Neta vs. Mortalidad del Lote**:
+> - La fórmula de Utilidad Neta es estrictamente:
+>   $$\text{Utilidad Neta} = \text{Venta Bruta} - \text{Costos Operativos}$$
+> - **Rol de la Mortalidad**: Los Costos Operativos (`costos_operativos_cop`) ya incluyen la adquisición inicial de la totalidad de las aves ingresadas más el alimento y vacunas que consumieron antes de morir. Por ende, la **Mortalidad del Lote** (`mortalidad_aves` y `porcentaje_mortalidad`) es un **indicador informativo y de desempeño técnico/biológico** que se reporta en la Matriz de Venta Final, y **no se resta monetariamente por segunda vez** de la Venta Bruta para evitar una doble deducción contable del costo de las aves muertas.
 
 ### Catálogo de errores del API
 

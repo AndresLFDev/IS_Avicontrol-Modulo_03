@@ -87,10 +87,10 @@ HTTP/1.1 200 OK
 {
   "content": [
     {
-      "idLote": "a1b2c3d4-...",
+      "idLote": "a1b2c3d4-e89b-12d3-a456-426614174000",
       "nombreLote": "Lote Norte Ciclo 4",
       "fechaIngreso": "2026-06-01",
-      "idGalpon": "f1e2d3c4-...",
+      "idGalpon": "f1e2d3c4-e89b-12d3-a456-426614174000",
       "nombreGalpon": "Galpón Norte",
       "etapa": "POR_LIQUIDAR",
       "siniestroTotal": false,
@@ -99,10 +99,10 @@ HTTP/1.1 200 OK
       "fechaHoraUltimaSincronizacion": "2026-10-03T10:00:00Z"
     },
     {
-      "idLote": "b2c3d4e5-...",
+      "idLote": "b2c3d4e5-e89b-12d3-a456-426614174000",
       "nombreLote": "Lote Sur Ciclo 3",
       "fechaIngreso": "2026-05-15",
-      "idGalpon": "e2d3c4b5-...",
+      "idGalpon": "e2d3c4b5-e89b-12d3-a456-426614174000",
       "nombreGalpon": "Galpón Sur",
       "etapa": "POR_LIQUIDAR",
       "siniestroTotal": true,
