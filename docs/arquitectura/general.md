@@ -1,7 +1,7 @@
 # General — Arquitectura y Stack Tecnológico
 
 **Estado**: Referencia técnica transversal del Módulo 3  
-**Fecha**: 03/10/2026  
+**Fecha**: 05/10/2026  
 **Diccionario de Dominio y Base de Datos**: [diccionario.md](../requisitos/diccionario.md)  
 
 ## Propósito
@@ -439,6 +439,36 @@ CREATE TABLE registro_anulacion (
   "timestamp": "2026-10-02T16:00:00Z"
 }
 ```
+
+### Catálogo de errores del API
+
+Todos los errores usan `ProblemDetail` con el campo extra `timestamp`; los `400` de validación agregan `errores: [{campo, mensaje}]`. Los ejemplos completos están en los planes 002, 003 y 004.
+
+| Status | `type` (sufijo de `https://avicontrol.edu.co/errors/`) | Cuándo | Endpoints |
+|---|---|---|---|
+| `400` | `validacion` | Body o query param inválido: `precioKgCop <= 0`, `motivo` vacío, UUID mal formado, `etapa` fuera del catálogo, `page < 0` | Todos |
+| `400` | `rango-fechas-invalido` | `desde` posterior a `hasta` en el historial (CU06.FR-005) | `GET /liquidaciones` |
+| `401` | `no-autenticado` | Falta el token JWT o expiró | Todos |
+| `403` | `sin-permiso` | El usuario no tiene el rol Administrador Financiero | Todos |
+| `404` | `lote-no-encontrado` | El lote no existe en la copia local | `POST /liquidaciones`, `POST /liquidaciones/previa` |
+| `404` | `liquidacion-no-encontrada` | No existe la Liquidación `{id}` | `GET /liquidaciones/{id}`, `/desglose`, `/desglose/excel`, `PUT .../anulacion` |
+| `409` | `liquidacion-ya-existente` | El lote ya tiene una Liquidación `ACTIVA` | `POST /liquidaciones` |
+| `409` | `liquidacion-ya-anulada` | Se intenta anular una Liquidación `ANULADA` | `PUT .../anulacion` |
+| `422` | `lote-no-liquidable` | El lote no está `POR_LIQUIDAR`, no tiene resultado de sacrificio ni es siniestro total, o no tiene partidas de costo | `POST /liquidaciones`, `POST /liquidaciones/previa` |
+| `500` | `error-interno` | Error no controlado (p. ej. falla al generar el Excel); el `detail` no expone trazas | Todos |
+
+### Catálogo de endpoints REST de M3
+
+| Método y ruta | Query params | Respuesta OK | Plan |
+|---|---|---|---|
+| `GET /api/v1/lotes` | `etapa`, `search`, `page`, `size` | `200` `LotePageDto` | 002 |
+| `POST /api/v1/liquidaciones/previa` | — | `200` `LiquidacionPreviaDto` (no persiste) | 003 |
+| `POST /api/v1/liquidaciones` | — | `201` `LiquidacionDto` + `Location` | 003 |
+| `GET /api/v1/liquidaciones/{id}` | — | `200` `LiquidacionDto` | 003 |
+| `PUT /api/v1/liquidaciones/{id}/anulacion` | — | `200` `AnulacionDto` | 003 |
+| `GET /api/v1/liquidaciones` | `search`, `desde`, `hasta`, `page`, `size` | `200` `HistorialPageDto` | 004 |
+| `GET /api/v1/liquidaciones/{id}/desglose` | — | `200` `DesgloseDto` | 004 |
+| `GET /api/v1/liquidaciones/{id}/desglose/excel` | — | `200` archivo `.xlsx` | 004 |
 
 ---
 

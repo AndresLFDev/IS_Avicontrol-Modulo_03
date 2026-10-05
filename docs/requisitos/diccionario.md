@@ -78,7 +78,7 @@ Evento registrado por Módulo 1 al concluir la cosecha y desvincular el lote del
 | `id_lote` | `UUID` | NO | FK→lote | Lote desvinculado del galpón al cierre del ciclo productivo. |
 | `fecha_hora_evento` | `TIMESTAMP` | NO | - | Momento exacto en que M1 registró el vaciado sanitario. |
 
-> **Regla de negocio**: La alerta es inmutable una vez recibida de M1. Su presencia — combinada con la existencia o no de una Liquidación `ACTIVA` — determina la etapa del lote en la lista (CU01.FR-013). No se elimina aunque el lote sea liquidado.
+> **Regla de negocio**: La alerta es inmutable una vez recibida de M1. Su presencia — combinada con la existencia o no de una Liquidación `ACTIVA` — determina la etapa del lote (CU01.FR-013); los lotes `Liquidado` no se listan en CU01 y se consultan en el historial (CU01.FR-014). No se elimina aunque el lote sea liquidado.
 
 ---
 

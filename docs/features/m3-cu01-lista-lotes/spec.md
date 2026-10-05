@@ -1,7 +1,7 @@
 # Feature Specification: M3-CU01 – Consultar Lista de Lotes
 
 **Created**: 2026-08-31  
-**Actualizado**: 2026-10-03  
+**Actualizado**: 2026-10-05  
 **Módulo**: 3 – Liquidación de Lote y Análisis de Rentabilidad (AVICONTROL)  
 **Rol Principal**: Administrador Financiero  
 
@@ -11,7 +11,7 @@
 
 ### User Story 1 - Consulta y Selección de Lotes (Priority: P1)
 
-Como administrador financiero, quiero consultar la lista consolidada de lotes con su identificación, el galpón que ocupan o ocuparon y su etapa financiera, para identificar qué lotes están pendientes de liquidar y operar sobre ellos.
+Como administrador financiero, quiero consultar la lista consolidada de lotes que aún no tienen una Liquidación `ACTIVA`, con su identificación, el galpón que ocupan o ocuparon y su etapa financiera, para identificar qué lotes están pendientes de liquidar y operar sobre ellos. Los lotes ya liquidados se consultan en el historial (M3-CU06).
 
 **Why this priority**: Es el punto de entrada obligatorio de todos los flujos financieros del Módulo 3. Toda acción financiera recae sobre un lote; sin esta vista, el usuario no puede seleccionar un lote sobre el cual operar.
 
@@ -22,7 +22,7 @@ Como administrador financiero, quiero consultar la lista consolidada de lotes co
 1. **Scenario**: Visualización de lotes con datos completos
    - **Given** existen lotes en la copia local sincronizada, con origen en Módulo 1 (M3-CU07)
    - **When** el administrador financiero accede al listado de lotes
-   - **Then** el sistema muestra cada lote con su UUID, nombre, fecha de ingreso, el nombre y UUID del galpón que ocupa u ocupó y su etapa (`Productivo`, `En Cosecha`, `Aislamiento`, `Por Liquidar`, `Liquidado`), junto con la fecha y hora de la última sincronización con Módulo 1 y con Módulo 2. El sistema permite filtrar la lista por etapa.
+   - **Then** el sistema muestra cada lote con su UUID, nombre, fecha de ingreso, el nombre y UUID del galpón que ocupa u ocupó y su etapa (`Productivo`, `En Cosecha`, `Aislamiento`, `Por Liquidar`), junto con la fecha y hora de la última sincronización con Módulo 1 y con Módulo 2. Los lotes con una Liquidación `ACTIVA` no aparecen en la lista (FR-014). El sistema permite filtrar la lista por etapa.
 
 2. **Scenario**: Selección de lote en cosecha para seguimiento del cierre
    - **Given** se visualiza la lista y existe un lote en etapa `En Cosecha`
@@ -50,7 +50,7 @@ Como administrador financiero, quiero consultar la lista consolidada de lotes co
    - **Then** el sistema muestra la última copia local disponible, identifica su fecha y hora de actualización y reintenta la consulta en segundo plano sin interrumpir la vista ni los demás módulos
 
 7. **Scenario**: Filtrado por etapa sin coincidencias
-   - **Given** se visualiza la lista de lotes y el usuario selecciona una etapa (`Productivo`, `En Cosecha`, `Aislamiento`, `Por Liquidar`, `Liquidado`)
+   - **Given** se visualiza la lista de lotes y el usuario selecciona una etapa (`Productivo`, `En Cosecha`, `Aislamiento`, `Por Liquidar`)
    - **When** ningún lote de la copia local corresponde a esa etapa
    - **Then** el sistema muestra el mensaje "No se encontraron resultados"
 
@@ -64,10 +64,10 @@ Como administrador financiero, quiero consultar la lista consolidada de lotes co
    - **When** el administrador financiero accede al listado
    - **Then** el sistema muestra únicamente los primeros 6 registros, sin importar el total disponible, y presenta al pie de la lista de resultados la cantidad mostrada frente al total (por ejemplo, "6 de 7 lotes"); el usuario avanza a los registros restantes mediante una acción explícita de paginación
 
-10. **Scenario**: Lote liquidado
-    - **Given** se visualiza la lista y existe un lote en etapa `Liquidado`
-    - **When** el usuario interactúa con dicho lote
-    - **Then** el sistema habilita la consulta de la Liquidación existente (M3-CU03.FR-014), desde la cual se accede al Desglose (M3-CU05) y a la anulación (M3-CU04); la fila no ofrece la generación de una nueva Liquidación
+10. **Scenario**: Lote liquidado fuera de la lista
+    - **Given** un lote con una Liquidación `ACTIVA` (etapa `Liquidado`)
+    - **When** el administrador financiero accede al listado de lotes
+    - **Then** el lote no aparece en la lista ni cuenta en el total de la paginación; su Liquidación se consulta desde el historial (M3-CU06), desde el cual se accede al Desglose (M3-CU05) y a la anulación (M3-CU04)
 
 
 11. **Scenario**: Lote en siniestro total
@@ -82,8 +82,9 @@ Como administrador financiero, quiero consultar la lista consolidada de lotes co
 - **Lote con población actual igual a 0 en `Productivo` o `En Cosecha`**: El sistema permite visualizarlo pero no habilita la Liquidación, porque Módulo 1 aún no ha registrado el vaciado sanitario. [NEEDS CLARIFICATION – D-04]
 - **Transición de estado concurrente**: Si el estado del galpón cambia en Módulo 1, el cambio se refleja en la siguiente sincronización. Las acciones en M3 se validan contra la copia local vigente, sin requerir consulta en vivo a Módulo 1.
 - **Población actual distinta de cero tras el vaciado sanitario**: Módulo 1 no exige población cero para transicionar a `Vaciado Sanitario`, por lo que un lote `Por Liquidar` puede tener población actual mayor a 0. Esa diferencia representa aves vendidas, no una inconsistencia, y no bloquea las acciones financieras.
-- **Galpón reocupado**: Si el galpón de un lote `Por Liquidar` o `Liquidado` recibe un lote nuevo, la etapa del lote anterior no cambia: se deriva de la alerta de vaciado sanitario y de la Liquidación, no del estado actual del galpón (FR-013).
-- **Liquidación anulada**: Si la única Liquidación de un lote pasa a `ANULADA` (M3-CU04), el lote vuelve a la etapa `Por Liquidar`.
+- **Galpón reocupado**: Si el galpón de un lote `Por Liquidar` recibe un lote nuevo, la etapa del lote anterior no cambia: se deriva de la alerta de vaciado sanitario y de la Liquidación, no del estado actual del galpón (FR-013).
+- **Liquidación anulada**: Si la Liquidación `ACTIVA` de un lote pasa a `ANULADA` (M3-CU04), el lote vuelve a la etapa `Por Liquidar` y reaparece en la lista para generar una nueva Liquidación.
+- **Liquidación generada desde la lista**: Al generarse la Liquidación de un lote (M3-CU03), el lote deja de mostrarse en la lista a partir de la siguiente consulta.
 - **Filtro y búsqueda combinados**: Si el usuario aplica un filtro por etapa y además ingresa un término de búsqueda, ambos criterios se combinan; el mensaje de FR-010 aplica igual si la combinación no retorna resultados.
 - **Paginación tras aplicar filtro o búsqueda**: Al cambiar el filtro por etapa o el término de búsqueda, el sistema MUST reiniciar la paginación en la primera página.
 
@@ -104,14 +105,13 @@ Como administrador financiero, quiero consultar la lista consolidada de lotes co
   - `Aislamiento`: galpón o lote con restricción sanitaria.
   
   [NEEDS CLARIFICATION – D-07: la grafía exacta de cada estado debe acordarse con Módulo 1, que actualmente los escribe en minúscula ("En cosecha", "Vaciado sanitario").]
-- **FR-004**: Para un lote en etapa `Por Liquidar`, el sistema MUST identificar el lote mediante los UUID históricos de la alerta de vaciado sanitario y MUST ofrecer, **en la propia fila del lote y sin pantalla de detalle intermedia**, la acción de generar la Liquidación (M3-CU03) si existe resultado final de sacrificio sincronizado o si la población actual sincronizada es 0. Para un lote en etapa `Liquidado`, MUST ofrecer en la propia fila la acción "Ver liquidación", que abre la Liquidación `ACTIVA` del lote (M3-CU03.FR-014). La lista NO ofrece acceso directo al Desglose ni a la anulación: ambos se alcanzan desde la Liquidación.
+- **FR-004**: Para un lote en etapa `Por Liquidar`, el sistema MUST identificar el lote mediante los UUID históricos de la alerta de vaciado sanitario y MUST ofrecer, **en la propia fila del lote y sin pantalla de detalle intermedia**, la acción de generar la Liquidación (M3-CU03) si existe resultado final de sacrificio sincronizado o si la población actual sincronizada es 0. La lista NO ofrece acceso a Liquidaciones existentes, al Desglose ni a la anulación: se alcanzan desde el historial (M3-CU06) y la vista de la Liquidación (M3-CU03.FR-014).
 - **FR-005**: Cada fila MUST mostrar **una única acción**, determinada por la etapa del lote (FR-013), y NO DEBE ocultarla cuando no aplique:
   - `Por Liquidar` → "Generar liquidación", habilitada si existe resultado final válido o si se trata de un siniestro total autorizado con población actual igual a 0; deshabilitada en caso contrario.
-  - `Liquidado` → "Ver liquidación", habilitada.
   - `Productivo`, `En Cosecha` o `Aislamiento` → "Generar liquidación", deshabilitada.
 - **FR-006**: Ante la ausencia de registros de lotes, el sistema MUST mostrar un estado vacío claro y mantener bloqueada cualquier acción posterior.
 - **FR-007**: El sistema MUST alimentarse exclusivamente de la copia local mantenida por el proceso de sincronización definido en **M3-CU07** y de las Liquidaciones registradas por M3. Esta especificación NO DEBE definir accesos propios a Módulo 1.
-- **FR-008**: El sistema MUST permitir filtrar la lista de lotes por una única etapa de FR-013, o por la opción "Todos".
+- **FR-008**: El sistema MUST permitir filtrar la lista de lotes por una única etapa listable (`Productivo`, `En Cosecha`, `Aislamiento`, `Por Liquidar`), o por la opción "Todos".
 - **FR-009**: El sistema MUST permitir buscar lotes por nombre de lote, nombre de galpón o UUID, sobre la copia local sincronizada.
 - **FR-010**: Cuando el filtro por etapa o la búsqueda no retornen ningún lote, el sistema MUST mostrar el mensaje "No se encontraron resultados". Este mensaje es distinto del definido en FR-006, que aplica exclusivamente cuando la copia local no contiene ningún lote registrado.
 - **FR-011**: El sistema MUST mostrar como máximo 6 lotes por página, sin importar cuántos registros resulten del filtro o búsqueda aplicados. Si el total de registros es mayor a 6, el sistema MUST paginar y mostrar únicamente los primeros 6 en la página inicial.
@@ -124,12 +124,13 @@ Como administrador financiero, quiero consultar la lista consolidada de lotes co
   5. El lote está vinculado a un galpón en `Aislamiento` → `Aislamiento`.
   
   La etapa es una derivación de M3: no se recibe de Módulo 1, no se le comunica y no altera la copia local. Un galpón que no tiene lote vinculado ni alerta pendiente no genera fila.
+- **FR-014**: El sistema MUST excluir de la lista, de los filtros, de la búsqueda y del total de la paginación los lotes en etapa `Liquidado` (con Liquidación `ACTIVA`). Esos lotes se consultan exclusivamente desde el historial (M3-CU06). Un lote cuya Liquidación se anula vuelve a listarse en etapa `Por Liquidar`.
 
 ### Key Entities
 
 - **Lote**: Conjunto de aves alojado en un galpón durante un ciclo productivo. Atributos clave: `idLote` (UUID), `idGalpon` (UUID), `nombre`, `fechaIngreso`, `edadCalculadaDias` (derivada), `poblacionInicial`, `poblacionActual`, `costoTotalCop`.
 - **Galpón**: Unidad física de producción avícola. Atributos clave: `idGalpon` (UUID), `nombre`, `aforoMaximo`, `estado` (`Disponible` | `Vaciado Sanitario` | `Productivo` | `En Cosecha` | `Mantenimiento` | `Aislamiento`).
-- **Etapa del Lote**: Valor derivado por FR-013 (`Productivo` | `En Cosecha` | `Aislamiento` | `Por Liquidar` | `Liquidado`). No se almacena.
+- **Etapa del Lote**: Valor derivado por FR-013 (`Productivo` | `En Cosecha` | `Aislamiento` | `Por Liquidar` | `Liquidado`). No se almacena. La etapa `Liquidado` no se lista (FR-014).
 - **CopiaLocalGalponLote**: Réplica local de Galpón y su lote activo utilizada por M3, con `fechaHoraUltimaSincronizacion` y estado de la última sincronización. Es mantenida por M3-CU07.
 - **AlertaVaciadoSanitario**: Evento originado en Módulo 2 y registrado por Módulo 1 al finalizar la cosecha. Conserva `idAlerta`, `idGalpon`, `idLote` y `fechaHoraEvento`, y permite a M3 identificar el lote que fue desvinculado del galpón.
 
@@ -144,3 +145,4 @@ Como administrador financiero, quiero consultar la lista consolidada de lotes co
 - **SC-003**: Cero accesos permitidos a la generación de la Liquidación fuera de la etapa `Por Liquidar`; la Liquidación sin resultado de sacrificio solo se permite en siniestro total con población actual igual a 0.
 - **SC-004**: Los usuarios pueden identificar la etapa de cualquier lote en menos de 5 segundos de interacción.
 - **SC-005**: El 100% de las consultas de lotes se completa usando la copia local disponible, aun cuando Módulo 1 esté temporalmente indisponible.
+- **SC-006**: Cero lotes con Liquidación `ACTIVA` visibles en la lista; el 100% de los lotes con Liquidación anulada reaparecen en etapa `Por Liquidar`.

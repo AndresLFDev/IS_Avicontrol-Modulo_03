@@ -1,7 +1,7 @@
 # Feature Specification: M3-CU04 – Anular Liquidación
 
 **Created**: 2026-09-18  
-**Actualizado**: 2026-10-03  
+**Actualizado**: 2026-10-05  
 **Módulo**: 3 – Liquidación de Lote y Análisis de Rentabilidad (AVICONTROL)  
 **Rol Principal**: Administrador Financiero  
 
@@ -63,7 +63,7 @@ Como administrador financiero, quiero anular formalmente una Liquidación emitid
 
 - **FR-001**: El sistema MUST proveer un flujo de anulación aplicable a la **Liquidación**, único Documento Financiero definido en el glosario del módulo.
 - **FR-002**: El sistema MUST permitir anular únicamente Liquidaciones que se encuentren en estado `ACTIVA`, y MUST rechazar la anulación de Liquidaciones en estado `ANULADA`.
-- **FR-002b**: La anulación se inicia únicamente desde la **vista de una Liquidación `ACTIVA`** definida en M3-CU03.FR-014, a la que se llega desde la lista de lotes (M3-CU01), desde el historial (M3-CU06) o desde el aviso de Liquidación existente (M3-CU03 escenario 8). El Desglose (M3-CU05) y el Historial (M3-CU06) solo **consultan** el registro de anulación; no la inician. Corresponde al `«extend»` de *Anular Liquidación* sobre *Generar Liquidación* en el diagrama de casos de uso.
+- **FR-002b**: La anulación se inicia únicamente desde la **vista de una Liquidación `ACTIVA`** definida en M3-CU03.FR-014, a la que se llega desde el historial (M3-CU06) o desde el aviso de Liquidación existente (M3-CU03 escenario 8). El Desglose (M3-CU05) y el Historial (M3-CU06) solo **consultan** el registro de anulación; no la inician. Corresponde al `«extend»` de *Anular Liquidación* sobre *Generar Liquidación* en el diagrama de casos de uso.
 - **FR-003**: El sistema MUST exigir un motivo de anulación no vacío (mínimo 10 caracteres, máximo 500) antes de permitir la confirmación.
 - **FR-004**: El sistema MUST mostrar una pantalla de confirmación explícita antes de persistir la anulación, indicando el lote afectado y las consecuencias de la acción. Si el usuario cancela, el sistema NO DEBE realizar cambio alguno.
 - **FR-005**: Al confirmarse la anulación, el sistema MUST cambiar el estado de la Liquidación a `ANULADA` y MUST crear un registro de auditoría con motivo, fecha, hora y usuario responsable.
