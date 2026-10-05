@@ -64,6 +64,7 @@ Reflejo local sincronizado de la parvada alojada en un galpón desde Módulo 1.
 | `poblacion_inicial` | `INT` | NO | - | Cantidad inicial de aves ingresadas. |
 | `poblacion_actual` | `INT` | NO | - | Aves vivas según el último reporte de M1. |
 | `costo_total_cop` | `BIGINT` | NO | - | Costo inicial de adquisición del lote de pollitos. |
+| `estado` | `VARCHAR(30)` | NO | - | Estado del lote informado por M1, sincronizado tal cual. No reemplaza la etapa que M3 deriva (CU01.FR-013). |
 | `fecha_hora_sync` | `TIMESTAMP` | NO | - | Estampa de tiempo de la última ingesta desde M1. |
 
 ---
@@ -77,6 +78,9 @@ Evento registrado por Módulo 1 al concluir la cosecha y desvincular el lote del
 | `id_galpon` | `UUID` | NO | FK→galpon | Galpón que quedó en estado `Vaciado Sanitario`. |
 | `id_lote` | `UUID` | NO | FK→lote | Lote desvinculado del galpón al cierre del ciclo productivo. |
 | `fecha_hora_evento` | `TIMESTAMP` | NO | - | Momento exacto en que M1 registró el vaciado sanitario. |
+| `id_registro_sincronizacion` | `BIGINT` | NO | FK→registro_sincronizacion | Ejecución de la sincronización que importó la alerta; su `fecha_hora_inicio` indica cuándo se recibió. |
+
+> **Restricción**: `id_lote` es `UNIQUE`; cada lote tiene como máximo una alerta de vaciado sanitario.
 
 > **Regla de negocio**: La alerta es inmutable una vez recibida de M1. Su presencia — combinada con la existencia o no de una Liquidación `ACTIVA` — determina la etapa del lote (CU01.FR-013); los lotes `Liquidado` no se listan en CU01 y se consultan en el historial (CU01.FR-014). No se elimina aunque el lote sea liquidado.
 
