@@ -38,7 +38,8 @@ IS_Avicontrol-Modulo_03/
 ├── docs/
 │   ├── enunciado/              lo que entregó el docente
 │   ├── requisitos/             requisitos de todo el módulo
-│   ├── features/               un caso de uso por carpeta
+│   ├── features/               un caso de uso por carpeta (spec)
+│   ├── planes/                 planes de implementación
 │   ├── arquitectura/           stack, capas y diagramas
 │   ├── plantillas/             moldes para specs y planes
 │   └── proceso/                forma de trabajo del equipo
@@ -100,48 +101,50 @@ docs/
 ├── enunciado/
 │   └── AVICONTROL.md                     enunciado del docente (no se edita)
 ├── requisitos/                           lo que aplica a TODO el módulo
-│   ├── glosario.md
-│   ├── reglas-transversales.md
-│   └── criterios-aceptacion.md
+│   ├── especificacion-general.md         épica: glosario, reglas transversales, mapa de CU
+│   └── diccionario.md                    diccionario de dominio y de datos
 ├── features/                             SOLO carpetas de casos de uso
-│   ├── m3-cu01-lista-galpones/
-│   │   ├── spec.md                       qué se construye
-│   │   └── plan.md                       cómo se construye
+│   ├── m3-cu01-lista-lotes/
+│   │   └── spec.md                       qué se construye
 │   ├── m3-cu03-generar-liquidacion/
-│   │   ├── spec.md
-│   │   └── plan.md
+│   │   └── spec.md
 │   └── ...
+├── planes/                               cómo se construye (uno o más CU por plan)
+│   ├── 001-sincronizacion-m1-m2.md       CU07–CU10
+│   ├── 002-consulta-galpones.md          CU01
+│   ├── 003-gestion-liquidaciones.md      CU03–CU04
+│   └── 004-reportes-historial.md         CU05–CU06
 ├── arquitectura/
-│   ├── general.md                        stack y capas
+│   ├── general.md                        stack, capas, modelo de datos
 │   └── diagramas/
-│       ├── casos-uso.drawio              fuente editable
-│       └── casos-uso.png                 exportación liviana
+│       └── casos-uso.drawio              fuente editable
 ├── plantillas/
 │   ├── spec.md
 │   └── plan.md
 └── proceso/
     ├── control-cambios.md                registro SC-<n>
-    └── estructura-repositorio.md         este documento
+    ├── estructura-repositorio.md         este documento
+    └── guia-sdd.md                       cómo usar spec y plan (SDD)
 ```
 
 | Carpeta | Pregunta que responde | Alcance de commit |
 |---|---|---|
 | `enunciado/` | ¿Qué pidió el docente? | `docs` |
-| `requisitos/` | ¿Qué reglas aplican a todo el módulo? (glosario, reglas transversales, criterios globales, supuestos) | `docs(requisitos)` |
+| `requisitos/` | ¿Qué reglas aplican a todo el módulo? (glosario, reglas transversales, criterios globales, diccionario de datos) | `docs(requisitos)` |
 | `features/<cu>/spec.md` | ¿Qué debe hacer este caso de uso? | `docs(requisitos)` |
-| `features/<cu>/plan.md` | ¿Cómo se implementa este caso de uso? | `docs(plan)` |
+| `planes/` | ¿Cómo se implementa este grupo de casos de uso? | `docs(plan)` |
 | `arquitectura/` | ¿Con qué y cómo se construye todo el sistema? | `docs(diseno)` |
 | `plantillas/` | ¿Qué molde copio para un spec o plan nuevo? | `docs` |
 | `proceso/` | ¿Cómo trabaja el equipo? | `docs(cambios)` para el registro, `docs` para el resto |
 
-Los nombres de archivo dentro de `requisitos/` son ejemplos: se crean cuando haya contenido para ellos.
-
 Reglas:
 
-- **Un caso de uso = una carpeta** en `features/`, con `spec.md` y `plan.md` y nada más. Si un caso de uso necesita un diagrama propio, va en `features/<cu>/diagramas/`.
+- **Un caso de uso = una carpeta** en `features/`, con su `spec.md` y nada más. Si un caso de uso necesita un diagrama propio, va en `features/<cu>/diagramas/`.
+- **Un plan cubre uno o más specs.** Los casos de uso que se implementan juntos (mismo modelo, mismos endpoints) comparten plan. Cada plan lista al inicio, en `**Specs**:`, los specs que cubre con enlace, y todo spec debe estar cubierto por exactamente un plan.
+- **Nombre de un plan:** `<nnn>-<descripcion>.md`, con número de tres dígitos consecutivo que no se reutiliza (`005-...`).
 - **Nada suelto en `features/`.** Un documento que hable de varios casos de uso no es de una feature: va en `requisitos/` (si es qué) o en `arquitectura/` (si es cómo).
 - **El ID del caso de uso no cambia** aunque cambie su nombre; si cambia el nombre, se renombra la carpeta en un commit `refactor` que solo mueve.
-- **Todo diagrama** se sube con su fuente editable (`.drawio`, `.puml`) y una exportación (`.png` o `.svg`) de máximo 1 MB con el mismo nombre base.
+- **Los diagramas se suben solo como fuente editable** (`.drawio`, `.puml`), sin exportaciones `.png` o `.svg`: se ven abriéndolos en draw.io o en la extensión del editor, y así no hay una imagen desactualizada respecto a su fuente.
 - **`enunciado/` no se edita.** Los cambios de alcance se registran en `proceso/control-cambios.md`.
 - **Las entregas al docente se identifican con tags de Git** (`v1.0.0`), no con carpetas de copias. Si una entrega exige un PDF, se adjunta al release de GitHub.
 
@@ -149,13 +152,14 @@ Reglas:
 
 | Antes | Problema | Ahora |
 |---|---|---|
-| `docs/specs/features/modulo3/spec.md` junto a las carpetas de CU | Un documento de todo el módulo mezclado con las features | Su contenido se reparte en `docs/requisitos/` |
+| `docs/specs/features/modulo3/spec.md` junto a las carpetas de CU | Un documento de todo el módulo mezclado con las features | `docs/requisitos/especificacion-general.md` |
 | `docs/specs/features/modulo3/...` | Tres niveles que no aportan: el repo ya es del Módulo 3 | `docs/features/` |
 | `docs/specs/features/modulo3/plan/General.md` | La arquitectura de todo el sistema dentro de las features | `docs/arquitectura/general.md` |
+| `docs/specs/features/modulo3/plan/00N-*.md` | Planes de implementación dentro de las features | `docs/planes/` |
 | `docs/specs/features/modulo3/CAMBIOS.md` | Registro de cambios dentro de los specs | `docs/proceso/control-cambios.md` |
-| `docs/specs/templates/` con `sdd-guide.MD` | Plantillas mezcladas con specs; extensión en mayúsculas | `docs/plantillas/` |
+| `docs/specs/templates/` con `sdd-guide.MD` | Plantillas mezcladas con specs; la guía no es una plantilla; extensión en mayúsculas | Plantillas en `docs/plantillas/`, guía en `docs/proceso/guia-sdd.md` |
 | `AVICONTROL.md` en la raíz y en `docs/` | Archivo duplicado | Solo en `docs/enunciado/` |
-| `docs/diagramas/Modulo3_v1.png` de 3,5 MB | Versión en el nombre y archivo pesado | `docs/arquitectura/diagramas/`, sin versión en el nombre, ≤ 1 MB |
+| `docs/diagramas/Modulo3_v1.drawio` + `.png` de 3,5 MB | Versión en el nombre; imagen pesada que duplica la fuente | Solo `docs/arquitectura/diagramas/casos-uso.drawio` |
 
 ---
 
@@ -349,7 +353,7 @@ frontend/
 | Datos simulados de M1/M2 para pruebas | `backend/src/test/resources/fixtures/m1/`, `.../m2/` | Sí |
 | Imágenes e íconos de la interfaz | `frontend/src/shared/` si se importan desde código; `frontend/public/` si no | Sí |
 | Reportes Excel generados | Se generan en memoria y se descargan por la API | **No** |
-| Diagramas | `docs/arquitectura/diagramas/` o `docs/features/<cu>/diagramas/` | Sí (fuente + exportación ≤ 1 MB) |
+| Diagramas | `docs/arquitectura/diagramas/` o `docs/features/<cu>/diagramas/` | Sí, solo la fuente (`.drawio`, `.puml`) |
 | Compilados (`backend/target/`, `frontend/dist/`), `node_modules/`, IDE (`.idea/`, `.vscode/`), logs | — | **No** |
 | Dependencias exactas del frontend | `frontend/package-lock.json` | **Sí** |
 

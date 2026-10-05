@@ -135,7 +135,7 @@ Un alcance funcional cubre backend y frontend: `feat(liquidacion)` puede tocar e
 
 | Alcance | Documento |
 |---|---|
-| `plan` | Plan técnico de un caso de uso: `docs/features/*/plan.md` |
+| `plan` | Planes de implementación: `docs/planes/` |
 | `requisitos` | Requisitos del módulo (`docs/requisitos/`) y de cada caso de uso (`docs/features/*/spec.md`) |
 | `diseno` | Arquitectura y diagramas: `docs/arquitectura/` |
 | `cambios` | [`docs/proceso/control-cambios.md`](docs/proceso/control-cambios.md) |
