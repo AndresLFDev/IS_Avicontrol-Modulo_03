@@ -49,9 +49,9 @@ HTTP/1.1 200 OK
     {
       "idLiquidacion": 42,
       "fechaHoraLiquidacion": "2026-09-28T16:42:00Z",
-      "idGalpon": "f1e2d3c4-...",
+      "idGalpon": "f1e2d3c4-e89b-12d3-a456-426614174000",
       "nombreGalpon": "Galpón Norte",
-      "idLote": "a1b2c3d4-...",
+      "idLote": "a1b2c3d4-e89b-12d3-a456-426614174000",
       "nombreLote": "Lote Norte Ciclo 4",
       "ventaBrutaCop": 139200000,
       "porcentajeMortalidad": 4.00,
@@ -62,9 +62,9 @@ HTTP/1.1 200 OK
     {
       "idLiquidacion": 40,
       "fechaHoraLiquidacion": "2026-09-20T09:15:00Z",
-      "idGalpon": "f1e2d3c4-...",
+      "idGalpon": "f1e2d3c4-e89b-12d3-a456-426614174000",
       "nombreGalpon": "Galpón Norte",
-      "idLote": "a1b2c3d4-...",
+      "idLote": "a1b2c3d4-e89b-12d3-a456-426614174000",
       "nombreLote": "Lote Norte Ciclo 4",
       "ventaBrutaCop": 127600000,
       "porcentajeMortalidad": 4.00,

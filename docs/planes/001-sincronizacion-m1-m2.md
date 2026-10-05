@@ -69,34 +69,47 @@ CREATE TABLE alerta_vaciado_sanitario (
 
 ## Intercambio de Datos y Payloads JSON
 
-### A. Payload Recibido de M1 (Galpón y Lote)
+### A. Payload Recibido de M1 (`GET /api/v1/galpones/{id}`)
 ```json
 {
-  "idGalpon": "123e4567-e89b-12d3-a456-426614174000",
-  "nombreGalpon": "Galpón 1",
-  "aforoMaximo": 10000,
+  "id": "123e4567-e89b-12d3-a456-426614174000",
+  "nombre": "Galpón Norte",
+  "capacidad": 10000,
   "estado": "VACIADO_SANITARIO",
-  "loteVigente": {
-    "idLote": "98765432-e89b-12d3-a456-426614174000",
-    "nombreLote": "Lote L-2026-A",
-    "fechaIngreso": "2026-08-01",
+  "loteActivo": {
+    "id": "98765432-e89b-12d3-a456-426614174000",
+    "nombre": "Lote L-2026-A",
     "poblacionInicial": 9000,
     "poblacionActual": 8500,
-    "costoTotalCop": 18000000
-  },
-  "fechaHoraSync": "2026-10-02T14:00:00Z"
+    "fechaIngreso": "2026-08-01",
+    "costoTotal": 18000000
+  }
 }
 ```
 
 ### B. Payload Recibido de M2 (Resultado Final de Sacrificio)
 ```json
 {
-  "idResultado": "456e7890-e89b-12d3-a456-426614174000",
+  "id": "456e7890-e89b-12d3-a456-426614174000",
+  "ordenSacrificioId": "876e5432-e89b-12d3-a456-426614174000",
   "idLote": "98765432-e89b-12d3-a456-426614174000",
-  "idGalpon": "123e4567-e89b-12d3-a456-426614174000",
   "cantidadFinalPollos": 8500,
   "pesoTotalKg": 23800.00,
-  "fechaRegistro": "2026-09-25T18:00:00Z"
+  "registradoEn": "2026-09-25T18:00:00-05:00"
+}
+```
+
+### C. Payload Recibido de M2 (Consumo de Insumos y Medicamentos Valorizados)
+```json
+{
+  "id": "333e4567-e89b-12d3-a456-426614174000",
+  "idLote": "98765432-e89b-12d3-a456-426614174000",
+  "medicamento": "Amoxicilina",
+  "cantidadIngresada": 50.0,
+  "unidadBase": "ML",
+  "precioNetoHistorico": 20000.00,
+  "porcentajeImpuesto": 5.00,
+  "precioTotalCop": 1050000
 }
 ```
 
