@@ -44,11 +44,13 @@ El Módulo 3 se encarga de determinar la rentabilidad real de cada lote avícola
 8. **M3-CU09 – Consultar Alimento Requerido al Módulo 2 (P1)**
 9. **M3-CU10 – Consultar Consumo de Medicamento al Módulo 2 (P1)**
 
+> **Nota Financiera (Matriz de Venta Final)**: La rentabilidad económica del ciclo se calcula como `Utilidad Neta = Venta Bruta - Costos Operativos`. La Mortalidad del Lote (`mortalidadAves` y `porcentajeMortalidad`) se reporta como indicador técnico/biológico informativo clave y no se resta por segunda vez en la ecuación monetaria para evitar una doble deducción de los costos ya incluidos en los Costos Operativos.
+
 ---
 
 ## 📐 Metodología de Desarrollo
 
 Este proyecto sigue el marco de **Specification-Driven Development (SDD)**:
 1. **Fase 1 (SPEC):** Especificaciones atómicas y autocontenidas (`docs/features/`).
-2. **Fase 2 (PLAN):** Diseño técnico de arquitectura, modelos y contratos de integración.
-3. **Fase 3 (Implementación):** Desarrollo en Java 17, Maven y pruebas unitarias con JUnit 5.
+2. **Fase 2 (PLAN):** Diseño técnico de arquitectura, modelos y contratos de integración (`docs/planes/` y `docs/arquitectura/general.md`).
+3. **Fase 3 (Implementación):** Desarrollo en Java 21 (LTS), Gradle y pruebas unitarias con JUnit 5 / Spring Boot Test.

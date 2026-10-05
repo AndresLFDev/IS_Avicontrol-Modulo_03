@@ -63,8 +63,8 @@ CREATE TABLE liquidacion (
 POST /api/v1/liquidaciones/previa
 
 {
-  "idLote": "a1b2c3d4-...",
-  "idGalpon": "f1e2d3c4-...",
+  "idLote": "a1b2c3d4-e89b-12d3-a456-426614174000",
+  "idGalpon": "f1e2d3c4-e89b-12d3-a456-426614174000",
   "precioKgCop": 5800.00,
   "usuario": "jgr@avicontrol.co"
 }
@@ -77,7 +77,7 @@ HTTP/1.1 200 OK
 {
   "esVistaPrevia": true,
   "aviso": "Vista previa · sin generar",
-  "idLote": "a1b2c3d4-...",
+  "idLote": "a1b2c3d4-e89b-12d3-a456-426614174000",
   "nombreLote": "Lote Norte Ciclo 4",
   "nombreGalpon": "Galpón Norte",
   "precioKgCop": 5800.00,
@@ -105,8 +105,8 @@ HTTP/1.1 200 OK
 POST /api/v1/liquidaciones
 
 {
-  "idLote": "a1b2c3d4-...",
-  "idGalpon": "f1e2d3c4-...",
+  "idLote": "a1b2c3d4-e89b-12d3-a456-426614174000",
+  "idGalpon": "f1e2d3c4-e89b-12d3-a456-426614174000",
   "precioKgCop": 5800.00,
   "usuario": "jgr@avicontrol.co"
 }
@@ -116,8 +116,8 @@ Location: /api/v1/liquidaciones/42
 {
   "idLiquidacion": 42,
   "estado": "ACTIVA",
-  "idLote": "a1b2c3d4-...",
-  "idGalpon": "f1e2d3c4-...",
+  "idLote": "a1b2c3d4-e89b-12d3-a456-426614174000",
+  "idGalpon": "f1e2d3c4-e89b-12d3-a456-426614174000",
   "nombreLote": "Lote Norte Ciclo 4",
   "nombreGalpon": "Galpón Norte",
   "siniestroTotal": false,
@@ -186,7 +186,7 @@ HTTP/1.1 409 Conflict
   "type": "https://avicontrol.co/errors/liquidacion-duplicada",
   "title": "Liquidación duplicada",
   "status": 409,
-  "detail": "El lote a1b2c3d4-... ya tiene una Liquidación ACTIVA (id=42). Anúlala antes de generar una nueva.",
+  "detail": "El lote a1b2c3d4-e89b-12d3-a456-426614174000 ya tiene una Liquidación ACTIVA (id=42). Anúlala antes de generar una nueva.",
   "instance": "/api/v1/liquidaciones"
 }
 ```
@@ -195,7 +195,7 @@ HTTP/1.1 409 Conflict
 
 ```json
 POST /api/v1/liquidaciones/previa
-{ "idLote": "a1b2c3d4-...", "idGalpon": "f1e2d3c4-...", "precioKgCop": 0, "usuario": "jgr@avicontrol.co" }
+{ "idLote": "a1b2c3d4-e89b-12d3-a456-426614174000", "idGalpon": "f1e2d3c4-e89b-12d3-a456-426614174000", "precioKgCop": 0, "usuario": "jgr@avicontrol.co" }
 
 HTTP/1.1 400 Bad Request
 {
@@ -237,7 +237,7 @@ HTTP/1.1 422 Unprocessable Entity
   "type": "https://avicontrol.edu.co/errors/lote-no-liquidable",
   "title": "Lote no apto para liquidar",
   "status": 422,
-  "detail": "El lote a1b2c3d4-... está en etapa PRODUCTIVO; solo se liquidan lotes POR_LIQUIDAR con resultado final de sacrificio o en siniestro total.",
+  "detail": "El lote a1b2c3d4-e89b-12d3-a456-426614174000 está en etapa PRODUCTIVO; solo se liquidan lotes POR_LIQUIDAR con resultado final de sacrificio o en siniestro total.",
   "instance": "/api/v1/liquidaciones",
   "timestamp": "2026-10-03T11:06:00Z"
 }
