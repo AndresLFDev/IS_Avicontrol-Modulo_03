@@ -16,7 +16,8 @@ Registro interno de las solicitudes de cambio (SC) sobre lo acordado para el Mó
 
 | ID | Fecha | Solicitante | Descripción | Motivo | Impacto (alcances / esfuerzo) | Estado | Aprobó | Issue | Versión |
 |---|---|---|---|---|---|---|---|---|---|
-| SC-01 | AAAA-MM-DD | | | | | Propuesto | | #n | |
+| SC-01 | 2026-10-05 | Equipo M3 | La lista de lotes deja de mostrar los lotes con Liquidación `ACTIVA`; se consultan en el historial | Evitar duplicar en la lista lo que ya muestra el historial | CU01, CU03, CU04, diccionario, planes 002 y 004 · Figma lista de lotes · 0,5 días | Propuesto | | — | |
+| SC-02 | 2026-10-05 | Docente | Definir los contratos REST completos: query params, cuerpos de respuesta y errores | Observación del docente: query params y API REST sin definir | `api` · arquitectura general, planes 002, 003 y 004 · 0,5 días | Propuesto | | — | |
 
 <!--
 Ejemplos de filas:

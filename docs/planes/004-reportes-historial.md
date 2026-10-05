@@ -1,7 +1,7 @@
 # Implementation Plan: Historial de Liquidaciones y Exportación de Desglose
 
 **Date**: 2026-09-28  
-**Actualizado**: 2026-10-03  
+**Actualizado**: 2026-10-05  
 **Specs**:
 - [m3-cu05-desglose-ventas-gastos](../features/m3-cu05-desglose-ventas-gastos/spec.md) – Consultar Desglose de Ventas y Gastos  
 - [m3-cu06-historial-liquidaciones](../features/m3-cu06-historial-liquidaciones/spec.md) – Consultar Historial de Liquidaciones  
@@ -10,7 +10,7 @@
 
 Este plan aborda la **consulta histórica cronológica** de liquidaciones (`CU06`) y la **visualización y exportación en Excel del desglose pormenorizado de ventas y gastos** (`CU05`).
 
-**Historial (CU06)**: Permite al Administrador Financiero filtrar liquidaciones por galpón y rango de fechas (orden descendente). Al seleccionar cualquier fila, el sistema abre la **vista de la Liquidación** (M3-CU03.FR-014) — no el desglose directamente. El Desglose se consulta desde la propia vista de la Liquidación (CU06.FR-006).
+**Historial (CU06)**: Permite al Administrador Financiero buscar liquidaciones por nombre o UUID de galpón o de lote y filtrarlas por rango de fechas (orden descendente). Es el **único punto de acceso** a las Liquidaciones ya generadas, porque la lista de lotes no muestra los lotes con Liquidación `ACTIVA` (M3-CU01.FR-014). Al seleccionar cualquier fila, el sistema abre la **vista de la Liquidación** (M3-CU03.FR-014) — no el desglose directamente. El Desglose se consulta desde la propia vista de la Liquidación (CU06.FR-006).
 
 **Desglose (CU05)**: Visualización agrupada por categorías de costo — **Alimento**, **Insumos Médicos** y **Costo de Población** (renombrada desde "Población Inicial" para alinear con CU03.FR-003 y CU07) — garantizando que los subtotales cuadran exactamente con `costosOperativosCop` de la Liquidación (FR-002). Exportación a `.xlsx` con Apache POI (`poi-ooxml:5.2.5`).
 
@@ -21,6 +21,81 @@ Este plan aborda la **consulta histórica cronológica** de liquidaciones (`CU06
 - **Storage**: Proyección y lectura sobre tablas `liquidacion`, `partida_costo_lote`, `registro_anulacion`
 - **Testing**: Unit tests de lógica de proyección/agrupación, tests de generación de Excel con Apache POI y tests REST
 - **Performance Goals**: Generación y descarga de archivo Excel < 10s (SC-002); consulta de historial < 3s (SC-001)
+
+---
+
+## Contrato REST del Historial (CU06)
+
+### `GET /api/v1/liquidaciones`
+
+| Query param | Tipo | Obligatorio | Valor por defecto | Regla |
+|---|---|---|---|---|
+| `search` | string | No | — | Texto libre, sin distinguir mayúsculas: coincide por contenido con nombre de galpón o de lote, o exacto con UUID de galpón o de lote (FR-003). Omitido = todas. Máx. 100 caracteres |
+| `desde` | fecha ISO `yyyy-MM-dd` | No | — | Incluye las Liquidaciones generadas desde las 00:00 de ese día (hora Colombia) |
+| `hasta` | fecha ISO `yyyy-MM-dd` | No | — | Incluye hasta las 23:59:59 de ese día. Si `desde > hasta` → `400` `rango-fechas-invalido` (FR-005) |
+| `page` | int | No | `0` | Índice 0-based, `>= 0` |
+| `size` | int | No | `10` | `1..50` |
+
+- Orden fijo: `fechaHoraLiquidacion` descendente (FR-001). No se expone `sort`.
+- Incluye Liquidaciones `ACTIVA` y `ANULADA` (FR-003).
+- Respuestas: `200` (incluso con `content` vacío), `400` (rango o parámetros inválidos), `401`/`403`. Ver el catálogo de errores en la arquitectura general.
+
+```json
+GET /api/v1/liquidaciones?search=norte&desde=2026-07-01&hasta=2026-09-30&page=0&size=10
+
+HTTP/1.1 200 OK
+{
+  "content": [
+    {
+      "idLiquidacion": 42,
+      "fechaHoraLiquidacion": "2026-09-28T16:42:00Z",
+      "idGalpon": "f1e2d3c4-...",
+      "nombreGalpon": "Galpón Norte",
+      "idLote": "a1b2c3d4-...",
+      "nombreLote": "Lote Norte Ciclo 4",
+      "ventaBrutaCop": 139200000,
+      "porcentajeMortalidad": 4.00,
+      "costosOperativosCop": 60200000,
+      "utilidadNetaCop": 79000000,
+      "estado": "ACTIVA"
+    },
+    {
+      "idLiquidacion": 40,
+      "fechaHoraLiquidacion": "2026-09-20T09:15:00Z",
+      "idGalpon": "f1e2d3c4-...",
+      "nombreGalpon": "Galpón Norte",
+      "idLote": "a1b2c3d4-...",
+      "nombreLote": "Lote Norte Ciclo 4",
+      "ventaBrutaCop": 127600000,
+      "porcentajeMortalidad": 4.00,
+      "costosOperativosCop": 60200000,
+      "utilidadNetaCop": 67400000,
+      "estado": "ANULADA"
+    }
+  ],
+  "page": 0,
+  "size": 10,
+  "totalElements": 2,
+  "totalPages": 1,
+  "mensaje": null
+}
+```
+
+Cuando `content` está vacío, `mensaje` trae el texto de FR-007: `"No hay liquidaciones registradas aún"` si no existe ninguna Liquidación y no se envió ningún filtro; `"No se encontraron liquidaciones para los criterios de búsqueda aplicados"` en cualquier otro caso.
+
+```json
+GET /api/v1/liquidaciones?desde=2026-09-30&hasta=2026-09-01
+
+HTTP/1.1 400 Bad Request
+{
+  "type": "https://avicontrol.edu.co/errors/rango-fechas-invalido",
+  "title": "Rango de fechas inválido",
+  "status": 400,
+  "detail": "La fecha inicial (2026-09-30) debe ser menor o igual a la fecha final (2026-09-01).",
+  "instance": "/api/v1/liquidaciones",
+  "timestamp": "2026-10-03T12:10:00Z"
+}
+```
 
 ---
 
@@ -37,7 +112,12 @@ import java.util.UUID;
 
 /** CU06 — Consultar historial cronológico filtrado */
 public interface ConsultarHistorialUseCase {
-    HistorialPageDto consultarHistorial(UUID idGalpon, LocalDate fechaInicio, LocalDate fechaFin, int page, int size);
+    /**
+     * @param search texto libre: nombre o UUID de galpón o de lote (null = todas)
+     * @param desde  fecha inicial inclusiva (null = sin límite)
+     * @param hasta  fecha final inclusiva (null = sin límite); desde > hasta → excepción de rango inválido
+     */
+    HistorialPageDto consultarHistorial(String search, LocalDate desde, LocalDate hasta, int page, int size);
 }
 
 /** CU05 — Consultar proyección de desglose de ventas y gastos */
@@ -79,7 +159,8 @@ public record HistorialPageDto(
     int page,
     int size,
     long totalElements,
-    int totalPages
+    int totalPages,
+    String mensaje                // null con resultados; texto de FR-007 cuando content está vacío
 ) {}
 
 public record PartidaDesgloseDto(
@@ -193,14 +274,52 @@ public class DesgloseController {
 }
 ```
 
+### Adaptador REST del Historial: `HistorialController.java`
+```java
+package co.edu.unimagdalena.avicontrol.infrastructure.adapter.rest;
+
+import co.edu.unimagdalena.avicontrol.domain.port.in.ConsultarHistorialUseCase;
+import co.edu.unimagdalena.avicontrol.domain.port.in.dto.HistorialPageDto;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDate;
+
+@RestController
+@RequestMapping("/api/v1/liquidaciones")
+public class HistorialController {
+
+    private final ConsultarHistorialUseCase consultarHistorialUseCase;
+
+    public HistorialController(ConsultarHistorialUseCase consultarHistorialUseCase) {
+        this.consultarHistorialUseCase = consultarHistorialUseCase;
+    }
+
+    /**
+     * GET /api/v1/liquidaciones?search=norte&desde=2026-07-01&hasta=2026-09-30&page=0&size=10
+     */
+    @GetMapping
+    public ResponseEntity<HistorialPageDto> consultarHistorial(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(
+            consultarHistorialUseCase.consultarHistorial(search, desde, hasta, page, size));
+    }
+}
+```
+
 ---
 
 ## Phase 1: CU06 – Historial Cronológico de Liquidaciones
 
 - [ ] **T001** Crear puerto `ConsultarHistorialUseCase.java` en `domain/port/in/` y DTOs `HistorialItemDto.java` y `HistorialPageDto.java` en `domain/port/in/dto/`.
-- [ ] **T002** Unit Test `ConsultarHistorialServiceTest.java`.
+- [ ] **T002** Unit Test `ConsultarHistorialServiceTest.java`: búsqueda por nombre y UUID de galpón y de lote, rango de fechas inclusivo, `desde > hasta` rechazado, orden descendente, inclusión de `ANULADA` y los dos mensajes de FR-007.
 - [ ] **T003** Implementar `ConsultarHistorialService.java`.
-- [ ] **T004** Integration Test e implementación de `GET /api/v1/liquidaciones` en `HistorialController.java`; verificar que cada fila incluye el `idLiquidacion` que sirve de enlace a la vista de Liquidación (M3-CU03.FR-014), no al desglose directamente.
+- [ ] **T004** Integration Test e implementación de `GET /api/v1/liquidaciones` en `HistorialController.java` (query params `search`, `desde`, `hasta`, `page`, `size`; `400` por rango inválido); verificar que cada fila incluye el `idLiquidacion` que sirve de enlace a la vista de Liquidación (M3-CU03.FR-014), no al desglose directamente.
 
 ---
 

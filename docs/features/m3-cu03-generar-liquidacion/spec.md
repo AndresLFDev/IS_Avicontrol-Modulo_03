@@ -1,7 +1,7 @@
 # Feature Specification: M3-CU03 – Generar Liquidación del Lote
 
 **Created**: 2026-08-31  
-**Actualizado**: 2026-10-03  
+**Actualizado**: 2026-10-05  
 **Módulo**: 3 – Liquidación de Lote y Análisis de Rentabilidad (AVICONTROL)  
 **Rol Principal**: Administrador Financiero  
 
@@ -78,7 +78,7 @@ Como administrador financiero, quiero generar la Liquidación económica definit
 
 11. **Scenario**: Consulta de una Liquidación existente
     - **Given** un lote con una Liquidación generada, en estado `ACTIVA` o `ANULADA`
-    - **When** el administrador financiero la abre desde la lista de lotes (M3-CU01) o desde el historial (M3-CU06)
+    - **When** el administrador financiero la abre desde el historial (M3-CU06) o al terminar de generarla
     - **Then** el sistema presenta la Liquidación como Matriz de Venta Final con sus valores tal como fueron emitidos, junto con los subtotales de Costos Operativos por categoría, la fecha, hora y usuario de generación y la fecha y hora de sincronización de cada fuente; ofrece consultar el Desglose (M3-CU05) y, solo si la Liquidación está `ACTIVA`, iniciar su anulación (M3-CU04). Si está `ANULADA`, muestra además su registro de anulación con motivo, fecha, hora y responsable
 
 12. **Scenario**: Abandono de la vista previa
@@ -133,7 +133,7 @@ Como administrador financiero, quiero generar la Liquidación económica definit
 - **FR-011**: El sistema MUST capturar manualmente, como único dato de entrada del administrador financiero, el **precio por kilogramo** en pesos colombianos (decimal positivo mayor que 0). MUST rechazar un precio menor o igual a cero.
 - **FR-012**: El sistema MUST tomar la cantidad final de pollos vendidos y el peso total exclusivamente del resultado final de sacrificio sincronizado (M3-CU08), MUST calcular `pesoPromedioKg = pesoTotalKg / pollosVendidos` solo con fines de presentación y NO DEBE editar ninguno de los valores operativos de origen.
 - **FR-013**: El sistema MUST presentar la Liquidación generada como **Matriz de Venta Final**: los cuatro indicadores (Venta Bruta, Mortalidad del Lote, Costos Operativos, Utilidad Neta) y los datos de venta que los sustentan (pollos vendidos, peso total, peso promedio, precio por kg).
-- **FR-014**: El sistema MUST permitir consultar una Liquidación existente, `ACTIVA` o `ANULADA`, desde la lista de lotes (M3-CU01, acción "Ver liquidación") y desde el historial (M3-CU06). La vista MUST presentar la Matriz de Venta Final (FR-013) con los valores congelados del snapshot, los subtotales de Costos Operativos por categoría (Alimento, Insumos Médicos, Costo de Población), la fecha, hora y usuario de generación y la fecha y hora de sincronización de cada fuente (RT-09). Desde esta vista el sistema MUST ofrecer la consulta del Desglose (M3-CU05) y, únicamente para una Liquidación `ACTIVA`, el inicio de su anulación (M3-CU04). Para una Liquidación `ANULADA` MUST mostrar su registro de anulación. La consulta NO DEBE recalcular ningún valor ni requerir consultas a Módulo 1 o Módulo 2.
+- **FR-014**: El sistema MUST permitir consultar una Liquidación existente, `ACTIVA` o `ANULADA`, desde el historial (M3-CU06) y, justo después de generarla, como resultado de la confirmación. La lista de lotes (M3-CU01) no muestra lotes con Liquidación `ACTIVA` (M3-CU01.FR-014). La vista MUST presentar la Matriz de Venta Final (FR-013) con los valores congelados del snapshot, los subtotales de Costos Operativos por categoría (Alimento, Insumos Médicos, Costo de Población), la fecha, hora y usuario de generación y la fecha y hora de sincronización de cada fuente (RT-09). Desde esta vista el sistema MUST ofrecer la consulta del Desglose (M3-CU05) y, únicamente para una Liquidación `ACTIVA`, el inicio de su anulación (M3-CU04). Para una Liquidación `ANULADA` MUST mostrar su registro de anulación. La consulta NO DEBE recalcular ningún valor ni requerir consultas a Módulo 1 o Módulo 2.
 - **FR-015**: El sistema MUST generar la Liquidación en **dos pasos**: (1) **captura** del precio por kg (FR-011) junto con el resultado final de sacrificio que lo sustenta, con la acción "Siguiente"; (2) **vista previa** no persistida que presenta la Matriz de Venta Final (FR-013), los subtotales de Costos Operativos por categoría y la Mortalidad del Lote, con las acciones "Volver" y "Generar liquidación". La Liquidación MUST persistirse únicamente al confirmar "Generar liquidación" en la vista previa, con los mismos valores mostrados. "Volver" MUST regresar a la captura sin crear registro alguno. La vista previa MUST identificarse con un aviso visible de que la Liquidación aún no ha sido generada (por ejemplo, "Vista previa · sin generar"); ese aviso NO es un estado de la Liquidación, cuyos únicos estados son `ACTIVA` y `ANULADA`. En siniestro total (FR-005) el paso de captura no solicita precio por kg. Las validaciones de FR-005, FR-006, FR-007 y FR-009 MUST ejecutarse antes de mostrar la vista previa y nuevamente al confirmar.
 
 ### Key Entities

@@ -1,7 +1,7 @@
 # Implementation Plan: Gestión del Ciclo de Vida de Liquidaciones
 
 **Date**: 2026-09-28  
-**Actualizado**: 2026-10-03  
+**Actualizado**: 2026-10-05  
 **Specs**:
 - [m3-cu03-generar-liquidacion](../features/m3-cu03-generar-liquidacion/spec.md) – Generar Liquidación del Lote  
 - [m3-cu04-anular-liquidacion](../features/m3-cu04-anular-liquidacion/spec.md) – Anular Liquidación  
@@ -112,13 +112,38 @@ POST /api/v1/liquidaciones
 }
 
 HTTP/1.1 201 Created
+Location: /api/v1/liquidaciones/42
 {
   "idLiquidacion": 42,
   "estado": "ACTIVA",
   "idLote": "a1b2c3d4-...",
-  ...
+  "idGalpon": "f1e2d3c4-...",
+  "nombreLote": "Lote Norte Ciclo 4",
+  "nombreGalpon": "Galpón Norte",
+  "siniestroTotal": false,
+  "precioKgCop": 5800.00,
+  "pollosVendidos": 9600,
+  "pesoTotalKg": 24000.00,
+  "pesoPromedioKg": 2.50,
+  "ventaBrutaCop": 139200000,
+  "mortalidadAves": 400,
+  "porcentajeMortalidad": 4.00,
+  "subtotalesCategoria": {
+    "alimento": 45000000,
+    "insumosMedicos": 3200000,
+    "costoPoblacion": 12000000
+  },
+  "costosOperativosCop": 60200000,
+  "utilidadNetaCop": 79000000,
+  "fechaHoraGeneracion": "2026-10-03T11:00:00Z",
+  "usuarioResponsable": "jgr@avicontrol.co",
+  "fechaSincronizacionM1": "2026-10-01T08:00:00Z",
+  "fechaSincronizacionM2": "2026-10-02T14:30:00Z",
+  "accionesDisponibles": ["VER_DESGLOSE", "ANULAR"]
 }
 ```
+
+El cuerpo del `201` es el mismo `LiquidacionDto` que devuelve `GET /api/v1/liquidaciones/{id}`; la cabecera `Location` apunta a esa consulta. A partir de este momento el lote deja de aparecer en `GET /api/v1/lotes` (M3-CU01.FR-014).
 
 ### Consulta de Liquidación Existente (FR-014)
 
@@ -166,6 +191,60 @@ HTTP/1.1 409 Conflict
 }
 ```
 
+### Error — Validación del Request (400 Bad Request)
+
+```json
+POST /api/v1/liquidaciones/previa
+{ "idLote": "a1b2c3d4-...", "idGalpon": "f1e2d3c4-...", "precioKgCop": 0, "usuario": "jgr@avicontrol.co" }
+
+HTTP/1.1 400 Bad Request
+{
+  "type": "https://avicontrol.edu.co/errors/validacion",
+  "title": "Datos inválidos",
+  "status": 400,
+  "detail": "La solicitud contiene campos inválidos.",
+  "instance": "/api/v1/liquidaciones/previa",
+  "timestamp": "2026-10-03T10:58:00Z",
+  "errores": [
+    { "campo": "precioKgCop", "mensaje": "El precio por kg debe ser mayor que 0" }
+  ]
+}
+```
+
+Mismo formato para `motivo` vacío en la anulación (`PUT .../anulacion`) y para UUID mal formados.
+
+### Error — Lote o Liquidación No Encontrados (404 Not Found)
+
+```json
+GET /api/v1/liquidaciones/999
+
+HTTP/1.1 404 Not Found
+{
+  "type": "https://avicontrol.edu.co/errors/liquidacion-no-encontrada",
+  "title": "Liquidación no encontrada",
+  "status": 404,
+  "detail": "No existe una Liquidación con id 999.",
+  "instance": "/api/v1/liquidaciones/999",
+  "timestamp": "2026-10-03T11:05:00Z"
+}
+```
+
+### Error — Lote No Apto para Liquidar (422 Unprocessable Entity)
+
+```json
+HTTP/1.1 422 Unprocessable Entity
+{
+  "type": "https://avicontrol.edu.co/errors/lote-no-liquidable",
+  "title": "Lote no apto para liquidar",
+  "status": 422,
+  "detail": "El lote a1b2c3d4-... está en etapa PRODUCTIVO; solo se liquidan lotes POR_LIQUIDAR con resultado final de sacrificio o en siniestro total.",
+  "instance": "/api/v1/liquidaciones",
+  "timestamp": "2026-10-03T11:06:00Z"
+}
+```
+
+Aplica también si no hay partidas de costo sincronizadas (CU03 esc. 5). Anular una Liquidación que ya está `ANULADA` responde `409` con `type` `.../liquidacion-ya-anulada`.
+
 ### Siniestro Total
 
 ```json
@@ -179,13 +258,34 @@ POST /api/v1/liquidaciones
 }
 
 HTTP/1.1 201 Created
+Location: /api/v1/liquidaciones/43
 {
   "idLiquidacion": 43,
   "estado": "ACTIVA",
-  "ventaBrutaCop": 0,
-  "pollosVendidos": 0,
+  "idLote": "b2c3d4e5-...",
+  "idGalpon": "e2d3c4b5-...",
+  "nombreLote": "Lote Sur Ciclo 3",
+  "nombreGalpon": "Galpón Sur",
   "siniestroTotal": true,
-  ...
+  "precioKgCop": null,
+  "pollosVendidos": 0,
+  "pesoTotalKg": 0.00,
+  "pesoPromedioKg": null,
+  "ventaBrutaCop": 0,
+  "mortalidadAves": 8000,
+  "porcentajeMortalidad": 100.00,
+  "subtotalesCategoria": {
+    "alimento": 21000000,
+    "insumosMedicos": 1800000,
+    "costoPoblacion": 10000000
+  },
+  "costosOperativosCop": 32800000,
+  "utilidadNetaCop": -32800000,
+  "fechaHoraGeneracion": "2026-10-03T11:20:00Z",
+  "usuarioResponsable": "jgr@avicontrol.co",
+  "fechaSincronizacionM1": "2026-10-01T08:00:00Z",
+  "fechaSincronizacionM2": "2026-10-02T14:30:00Z",
+  "accionesDisponibles": ["VER_DESGLOSE", "ANULAR"]
 }
 ```
 
