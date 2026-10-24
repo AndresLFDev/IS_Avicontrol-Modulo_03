@@ -130,10 +130,12 @@ M2 entrega cantidad y precio por tramo, nunca un total en pesos (RT-07). Un tram
 | Evento | Se rechaza si | Spec |
 |---|---|---|
 | Galpón | Falta `idGalpon` o `estado`; `estado` fuera del catálogo `EstadoGalpon`; lote sin `poblacionInicial`, con `costoTotalCop <= 0` o `poblacionActual > poblacionInicial` | CU07.FR-010, FR-011 |
-| Alerta | Falta `idLote` o `idGalpon`; el lote no existe en la copia local | CU07.FR-010 |
+| Alerta | Falta `idLote` o `idGalpon` | CU07.FR-010 |
 | Resultado | `cantidadFinalPollos <= 0`, `pesoTotalKg <= 0` o ausentes; ya existe otro resultado para el lote | CU08.FR-003, FR-010 |
-| Resultado (corrección) | El resultado existente ya está `UTILIZADO` (se registra incidencia y no se actualiza) | CU08.FR-004, FR-005 |
-| Partida / consumo | Cantidad `<= 0` o lote inexistente | CU09, CU10 |
+| Resultado (corrección) | El resultado existente ya está `UTILIZADO`, aunque su Liquidación se haya anulado (se registra incidencia y no se actualiza) | CU08.FR-004, FR-005 |
+| Partida / consumo | Falta `idLote` o cantidad `<= 0` | CU09, CU10 |
+
+**Lote inexistente no es un dato inválido.** Si un evento válido de alerta, resultado, partida o consumo llega antes que el evento de `avicontrol.m1.galpones` que trae su lote, se guarda en `evento_pendiente_lote`, su fila de la bitácora queda `PENDIENTE_LOTE` y se aplica cuando llega el lote (reglas en la [arquitectura general](../arquitectura/general.md#b-reglas-de-consumo)).
 
 ---
 
@@ -214,6 +216,8 @@ public class SyncModulo1Service implements SincronizarModulo1UseCase {
     private final LoteRepository loteRepository;
     private final AlertaVaciadoSanitarioRepository alertaRepository;
     private final RegistroSincronizacionRepository bitacora;
+    private final EventoPendienteLoteRepository pendientes;
+    private final AplicadorEventosPendientes aplicadorPendientes; // aplica los pendientes de M1 y M2 de un lote
     private final Clock clock;
 
     // Constructor con inyección de dependencias...
@@ -221,7 +225,7 @@ public class SyncModulo1Service implements SincronizarModulo1UseCase {
     @Override
     @Transactional
     public void procesarGalpon(UUID idEvento, GalponEvento evento) {
-        if (bitacora.yaProcesado(idEvento)) return;               // idempotencia por eventId
+        if (bitacora.yaRegistrado(idEvento)) return;              // idempotencia por eventId (cualquier resultado)
         var registro = bitacora.iniciar(FuenteSincronizacion.MODULO_1, "m1.galpones", idEvento, clock.instant());
 
         var errores = evento.validar();                           // CU07.FR-010 y FR-011
@@ -232,8 +236,11 @@ public class SyncModulo1Service implements SincronizarModulo1UseCase {
         galponRepository.guardarOActualizar(evento.toGalpon(clock.instant()));
         int filas = 1;
         if (evento.loteVinculado() != null) {
-            loteRepository.guardarOActualizar(evento.toLote(clock.instant()));
+            boolean loteNuevo = loteRepository.guardarOActualizar(evento.toLote(clock.instant()));
             filas++;
+            if (loteNuevo) {
+                aplicadorPendientes.aplicar(evento.loteVinculado().idLote()); // eventos que llegaron antes que el lote
+            }
         }
         bitacora.completar(registro, filas, clock.instant());
     }
@@ -241,8 +248,13 @@ public class SyncModulo1Service implements SincronizarModulo1UseCase {
     @Override
     @Transactional
     public void procesarAlertaVaciado(UUID idEvento, AlertaVaciadoEvento evento) {
-        if (bitacora.yaProcesado(idEvento)) return;
+        if (bitacora.yaRegistrado(idEvento)) return;
         var registro = bitacora.iniciar(FuenteSincronizacion.MODULO_1, "m1.alertas-vaciado", idEvento, clock.instant());
+        if (!loteRepository.existe(evento.idLote())) {
+            pendientes.guardar(idEvento, evento.idLote(), "m1.alertas-vaciado", evento, clock.instant());
+            bitacora.marcarPendienteLote(registro);                // el offset se confirma; no es un error
+            return;
+        }
         // Inmutable: si ya existe una alerta para el lote no se modifica (CU07 esc. 6)
         int filas = alertaRepository.guardarSiNoExiste(evento.toAlerta(registro.id())) ? 1 : 0;
         bitacora.completar(registro, filas, clock.instant());
@@ -250,7 +262,9 @@ public class SyncModulo1Service implements SincronizarModulo1UseCase {
 }
 ```
 
-Los errores técnicos (base de datos, JSON ilegible) se propagan como excepción para que el `DefaultErrorHandler` de Spring Kafka aplique los reintentos y la DLT.
+`SyncModulo2Service` aplica la misma comprobación de lote en `procesarResultadoSacrificio`, `procesarPartidaAlimento` y `procesarConsumoMedicamento`. `AplicadorEventosPendientes` (en `application/service/sync/`) lee los pendientes del lote en orden de `fecha_hora_recepcion`, los aplica con la misma lógica de cada tipo, pasa su fila de la bitácora a `EXITOSA` o `FALLIDA` y los borra, todo en la transacción del galpón.
+
+Los errores técnicos (base de datos caída) se propagan como excepción para que el `DefaultErrorHandler` de Spring Kafka aplique los reintentos y la DLT. Un JSON ilegible no llega al servicio: lo detecta el `ErrorHandlingDeserializer` y va directo a la DLT (T005).
 
 ### Publicación de avisos: `PublicarAvisosUtilizacionService.java`
 ```java
@@ -286,24 +300,24 @@ public class PublicarAvisosUtilizacionService {
 
 - [ ] **T001** Crear migración Flyway `V1__create_sync_tables.sql` (DDL de la arquitectura general).
 - [ ] **T002** Crear migración Flyway `V2__create_partidas_tables.sql`.
-- [ ] **T003** Crear modelos de dominio (`Galpon`, `Lote`, `AlertaVaciadoSanitario`, `ResultadoFinalSacrificio`, `PartidaAlimentoLote`, `ConsumoMedicamentoLote`, `TramoRecepcionConsumo`, `RegistroSincronizacion`, `AvisoUtilizacionResultado`) y enums (`EstadoGalpon`, `FuenteSincronizacion`, `ResultadoSincronizacion`, `EstadoUtilizacion`, `EstadoValorizacion`, `EstadoEntregaAviso`).
+- [ ] **T003** Crear modelos de dominio (`Galpon`, `Lote`, `AlertaVaciadoSanitario`, `ResultadoFinalSacrificio`, `PartidaAlimentoLote`, `ConsumoMedicamentoLote`, `TramoRecepcionConsumo`, `RegistroSincronizacion`, `EventoPendienteLote`, `AvisoUtilizacionResultado`) y enums (`EstadoGalpon`, `FuenteSincronizacion`, `ResultadoSincronizacion`, `EstadoUtilizacion`, `EstadoValorizacion`, `EstadoEntregaAviso`).
 - [ ] **T004** Crear entidades JPA, repositorios Spring Data, adaptadores de los puertos `port/out` y mappers.
-- [ ] **T005** Configurar Kafka en `KafkaConfig.java`: consumidor con confirmación manual, `DefaultErrorHandler` con 3 reintentos y backoff exponencial, `DeadLetterPublishingRecoverer` hacia `avicontrol.m3.dlt`, productor con `acks=all`. Tópicos en `application.yml` (`kafka.topicos.*`).
+- [ ] **T005** Configurar Kafka en `KafkaConfig.java`: consumidor con confirmación manual y `ErrorHandlingDeserializer` envolviendo el deserializador JSON, `DefaultErrorHandler` con 3 reintentos y backoff exponencial para errores técnicos, `DeserializationException` (y sobre sin `eventId`) como no reintentable, `DeadLetterPublishingRecoverer` hacia `avicontrol.m3.dlt`, productor con `acks=all`. Tópicos en `application.yml` (`kafka.topicos.*`).
 - [ ] **T006** Crear el sobre `SobreEvento<T>` y los payloads JSON de `infrastructure/adapter/messaging/`, y los fixtures de `src/test/resources/fixtures/m1/` y `fixtures/m2/`.
 
 ---
 
 ## Phase 2: CU07 – Sincronización M1 (Galpones, Lotes y Alertas)
 
-- [ ] **T007** Unit Test `SyncModulo1ServiceTest.java`: alta y actualización de galpón y lote, población inicial sin cambios en actualizaciones, lote desvinculado conservado, alerta nueva e idempotente, evento repetido descartado por `eventId`, datos inválidos registrados como `FALLIDA` sin sobrescribir.
-- [ ] **T008** Implementar `SincronizarModulo1UseCase` y `SyncModulo1Service.java`.
+- [ ] **T007** Unit Test `SyncModulo1ServiceTest.java`: alta y actualización de galpón y lote, población inicial sin cambios en actualizaciones, lote desvinculado conservado, alerta nueva e idempotente, alerta antes que su lote (queda `PENDIENTE_LOTE` y se aplica al llegar el lote), evento repetido descartado por `eventId`, datos inválidos registrados como `FALLIDA` sin sobrescribir.
+- [ ] **T008** Implementar `SincronizarModulo1UseCase`, `SyncModulo1Service.java` y `AplicadorEventosPendientes.java` con su puerto `EventoPendienteLoteRepository`.
 - [ ] **T009** Integration Test `Modulo1EventConsumerIT.java` (Testcontainers) e implementación de `Modulo1EventConsumer.java`, incluida la traducción de la grafía de estados de M1 (D-07).
 
 ---
 
 ## Phase 3: CU08 – Resultado de Sacrificio y Aviso de Utilización
 
-- [ ] **T010** Unit Test `SyncModulo2ServiceTest.java` (resultado): resultado válido, inválido, corrección antes y después de ser utilizado, segundo resultado para el mismo lote.
+- [ ] **T010** Unit Test `SyncModulo2ServiceTest.java` (resultado): resultado válido, inválido, corrección antes de ser utilizado, corrección rechazada después de ser utilizado (también si la Liquidación se anuló), segundo resultado para el mismo lote, resultado antes que su lote.
 - [ ] **T011** Implementar `procesarResultadoSacrificio` en `SyncModulo2Service.java`.
 - [ ] **T012** Unit Test `PublicarAvisosUtilizacionServiceTest.java`: entrega exitosa, fallo que deja el aviso `PENDIENTE` e incrementa `intentos`.
 - [ ] **T013** Implementar `PublicarAvisosUtilizacionService.java`, el puerto `AvisoUtilizacionPublisher` y `AvisoUtilizacionKafkaProducer.java`. La creación del aviso en la misma transacción de la Liquidación se implementa en el plan 003 (T009).
@@ -312,15 +326,15 @@ public class PublicarAvisosUtilizacionService {
 
 ## Phase 4: CU09 y CU10 – Alimento y Medicamentos
 
-- [ ] **T014** Unit Tests de `SyncModulo2Service` para partidas de alimento (valorizada, `PENDIENTE_PRECIO`, idempotencia) y consumos de medicamento (uno y varios tramos, tramo sin precio, reemplazo de tramos al reprocesar).
+- [ ] **T014** Unit Tests de `SyncModulo2Service` para partidas de alimento (valorizada, `PENDIENTE_PRECIO`, idempotencia) y consumos de medicamento (uno y varios tramos, tramo sin precio, reemplazo de tramos al reprocesar), y partida o consumo antes que su lote.
 - [ ] **T015** Implementar `procesarPartidaAlimento` y `procesarConsumoMedicamento`.
-- [ ] **T016** Integration Test `Modulo2EventConsumerIT.java` e implementación de `Modulo2EventConsumer.java`.
+- [ ] **T016** Integration Test `Modulo2EventConsumerIT.java` e implementación de `Modulo2EventConsumer.java`. Incluye el arranque con base vacía: se publican primero los eventos de M2 y después el del galpón, y al final la copia local queda completa. Incluye también un JSON ilegible que pasa a la DLT sin reintentos.
 
 ---
 
 ## Phase 5: Estado de la Sincronización (RT-09)
 
-- [ ] **T017** Implementar `GET /api/v1/sincronizacion/estado`, que responde por fuente la fecha y hora de la última sincronización exitosa y `desactualizada: true` si supera `sync.umbral-inactividad` o el broker no está disponible.
+- [ ] **T017** Implementar `GET /api/v1/sincronizacion/estado` con el puerto `ConsultarEstadoSincronizacionUseCase`, `EstadoSincronizacionService` (`application/service/sync/`) y `SincronizacionController` (`adapter/rest/`). `ListarLotesService` (plan 002) usa el mismo puerto. El endpoint responde por fuente la fecha y hora de la última sincronización exitosa y `desactualizada: true` si supera `sync.umbral-inactividad` o el broker no está disponible.
 
 ```json
 GET /api/v1/sincronizacion/estado

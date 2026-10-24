@@ -221,6 +221,7 @@ package co.edu.unimagdalena.avicontrol.application.service;
 import co.edu.unimagdalena.avicontrol.domain.exception.ParametroInvalidoException;
 import co.edu.unimagdalena.avicontrol.domain.model.EtapaLote;
 import co.edu.unimagdalena.avicontrol.domain.model.LoteListado;
+import co.edu.unimagdalena.avicontrol.domain.port.in.ConsultarEstadoSincronizacionUseCase;
 import co.edu.unimagdalena.avicontrol.domain.port.in.ListarLotesUseCase;
 import co.edu.unimagdalena.avicontrol.domain.port.in.dto.LotePageDto;
 import co.edu.unimagdalena.avicontrol.domain.port.in.dto.LoteResumenDto;
@@ -234,9 +235,9 @@ public class ListarLotesService implements ListarLotesUseCase {
     private static final int TAMANO_MAXIMO = 6; // FR-011
 
     private final LoteRepository loteRepository;
-    private final EstadoSincronizacionService estadoSincronizacion;
+    private final ConsultarEstadoSincronizacionUseCase estadoSincronizacion;
 
-    public ListarLotesService(LoteRepository loteRepository, EstadoSincronizacionService estadoSincronizacion) {
+    public ListarLotesService(LoteRepository loteRepository, ConsultarEstadoSincronizacionUseCase estadoSincronizacion) {
         this.loteRepository = loteRepository;
         this.estadoSincronizacion = estadoSincronizacion;
     }

@@ -218,7 +218,7 @@ Las áreas no son paquetes, pero sí deciden el alcance del commit (ver [`CONTRI
 | `venta` | Venta bruta dentro de `CalculoLiquidacion` |
 | `liquidacion` | `Liquidacion`, `GenerarLiquidacionService`, `AnularLiquidacionService`, `ListarLotesService`, `LiquidacionController`, `LoteController` |
 | `reportes` | `ConsultarHistorialService`, `ConsultarDesgloseService`, `ExportarExcelService`, `ExcelWorkbookBuilder` |
-| `integracion` | `application/service/sync/`, `adapter/messaging/`, copia local de M1 y M2 |
+| `integracion` | `application/service/sync/`, `adapter/messaging/`, `SincronizacionController` (estado RT-09), copia local de M1 y M2 |
 
 ---
 

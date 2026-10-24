@@ -11,7 +11,7 @@ Lista de tareas pendientes y acuerdos del equipo para las siguientes fases.
 
 - [ ] Decisiones D-01 a D-08 con los equipos de M1 y M2 (ver `docs/requisitos/especificacion-general.md`).
 - [ ] D-08: acordar que M1 y M2 publiquen sus eventos en Kafka con los tópicos y campos del plan 001 (`docs/planes/001-sincronizacion-m1-m2.md`), o ajustar el contrato a lo que publiquen.
-- [ ] D-03: acordar con M2 el formato y la confirmación del aviso de utilización (`avicontrol.m3.avisos-utilizacion`).
+- [ ] D-03: acordar con M2 el formato y la confirmación del aviso de utilización (`avicontrol.m3.avisos-utilizacion`), y que no corrija un resultado ya avisado (es definitivo para M3).
 
 ## Construcción del Backend
 

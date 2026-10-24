@@ -24,7 +24,7 @@ Este documento define la arquitectura, las tecnologías, el modelo de datos rela
 | Base de datos | PostgreSQL 16 en todos los perfiles | Copia local sincronizada y liquidaciones. No se usa H2: no soporta el índice único parcial `uq_lote_activa` |
 | Migraciones | Flyway (`flyway-core`, `flyway-database-postgresql`) | Versionamiento y aplicación ordenada del esquema SQL |
 | Mensajería inter-módulos | Apache Kafka + Spring Kafka 4 | **Único** mecanismo de integración con Módulo 1 y Módulo 2 (eventos entrantes) y aviso de utilización hacia Módulo 2 (evento saliente) |
-| Exportación de reportes | Apache POI `poi-ooxml:5.2.5` | Generación de reportes Excel (CU05) |
+| Exportación de reportes | Apache POI `poi-ooxml:5.5.1` | Generación de reportes Excel (CU05) |
 | Serialización | Jackson 3 (paquete `tools.jackson`) | JSON para API REST y eventos Kafka |
 | Documentación API | OpenAPI 3 (`springdoc-openapi` 3.x) | Descripción interactiva de endpoints en `/swagger-ui.html` |
 | Pruebas unitarias | JUnit 5 y Mockito | Reglas de dominio y casos de uso aislados |
@@ -69,6 +69,7 @@ co.edu.unimagdalena.avicontrol/
 │   │   │   ├── ExportarExcelUseCase.java
 │   │   │   ├── SincronizarModulo1UseCase.java
 │   │   │   ├── SincronizarModulo2UseCase.java
+│   │   │   ├── ConsultarEstadoSincronizacionUseCase.java
 │   │   │   └── dto/                   ← DTOs de casos de uso (records de Java puro) ★
 │   │   │       ├── LoteResumenDto.java
 │   │   │       ├── LotePageDto.java
@@ -90,6 +91,7 @@ co.edu.unimagdalena.avicontrol/
 │   │       ├── LiquidacionRepository.java
 │   │       ├── RegistroAnulacionRepository.java
 │   │       ├── RegistroSincronizacionRepository.java
+│   │       ├── EventoPendienteLoteRepository.java
 │   │       ├── AvisoUtilizacionRepository.java
 │   │       ├── AvisoUtilizacionPublisher.java
 │   │       └── GeneradorExcelPort.java
@@ -107,6 +109,7 @@ co.edu.unimagdalena.avicontrol/
 │       └── sync/
 │           ├── SyncModulo1Service.java
 │           ├── SyncModulo2Service.java
+│           ├── AplicadorEventosPendientes.java
 │           ├── EstadoSincronizacionService.java
 │           └── PublicarAvisosUtilizacionService.java
 │
@@ -116,7 +119,8 @@ co.edu.unimagdalena.avicontrol/
     │   │   ├── LoteController.java
     │   │   ├── LiquidacionController.java
     │   │   ├── DesgloseController.java
-    │   │   └── HistorialController.java
+    │   │   ├── HistorialController.java
+    │   │   └── SincronizacionController.java
     │   ├── messaging/                 ← Kafka: consumidores de M1/M2 y productor del aviso
     │   │   ├── Modulo1EventConsumer.java
     │   │   ├── Modulo2EventConsumer.java
@@ -181,6 +185,7 @@ erDiagram
     liquidacion ||--o{ snapshot_datos_origen : documenta
     liquidacion ||--o| registro_anulacion : anula
     resultado_final_sacrificio ||--o| aviso_utilizacion_resultado : notifica
+    registro_sincronizacion ||--o| evento_pendiente_lote : retiene
     liquidacion ||--o| aviso_utilizacion_resultado : origina
 
     galpon {
@@ -321,6 +326,14 @@ erDiagram
         int registros_actualizados
     }
 
+    evento_pendiente_lote {
+        uuid id_evento PK
+        uuid id_lote
+        string topico
+        jsonb payload
+        timestamptz fecha_hora_recepcion
+    }
+
     aviso_utilizacion_resultado {
         bigint id_aviso PK
         uuid id_resultado FK
@@ -338,6 +351,7 @@ erDiagram
 > - `registro_anulacion.id_liquidacion` → `UNIQUE` — una sola anulación por Liquidación.
 > - `aviso_utilizacion_resultado.id_resultado` → `UNIQUE` — un solo aviso por resultado; la Liquidación que lo origina es la primera que consumió el resultado (CU04, caso borde "Resultado ya avisado").
 > - `registro_sincronizacion.id_evento` → `UNIQUE` — un evento Kafka se procesa una sola vez (idempotencia).
+> - `evento_pendiente_lote.id_lote` no tiene FK: el lote todavía no existe en la copia local cuando el evento se retiene (ver [Reglas de consumo](#b-reglas-de-consumo)).
 
 ---
 
@@ -351,15 +365,26 @@ CREATE TABLE registro_sincronizacion (
     id                     BIGSERIAL PRIMARY KEY,
     fuente                 VARCHAR(20)  NOT NULL,
     topico                 VARCHAR(100) NOT NULL,
-    id_evento              UUID UNIQUE,
+    id_evento              UUID         NOT NULL UNIQUE,
     fecha_hora_inicio      TIMESTAMPTZ  NOT NULL,
     fecha_hora_fin         TIMESTAMPTZ,
     resultado              VARCHAR(20),
     descripcion_error      TEXT,
     registros_actualizados INT NOT NULL DEFAULT 0,
     CONSTRAINT chk_sync_fuente    CHECK (fuente IN ('MODULO_1', 'MODULO_2')),
-    CONSTRAINT chk_sync_resultado CHECK (resultado IN ('EXITOSA', 'FALLIDA'))
+    CONSTRAINT chk_sync_resultado CHECK (resultado IN ('EXITOSA', 'FALLIDA', 'PENDIENTE_LOTE'))
 );
+
+-- Eventos de M1/M2 que llegaron antes que su lote; se aplican al llegar el lote y se borran
+CREATE TABLE evento_pendiente_lote (
+    id_evento            UUID PRIMARY KEY REFERENCES registro_sincronizacion(id_evento),
+    id_lote              UUID         NOT NULL,   -- sin FK: el lote aún no existe
+    topico               VARCHAR(100) NOT NULL,
+    payload              JSONB        NOT NULL,   -- DTO del evento ya validado
+    fecha_hora_recepcion TIMESTAMPTZ  NOT NULL
+);
+
+CREATE INDEX idx_evento_pendiente_lote ON evento_pendiente_lote(id_lote, fecha_hora_recepcion);
 
 CREATE TABLE galpon (
     id_galpon       UUID PRIMARY KEY,
@@ -567,10 +592,20 @@ Los nombres de tópico y el formato de los eventos deben confirmarse con M1 y M2
 
 - **Eventos con estado completo**: cada evento trae el estado completo de la entidad (no deltas), de modo que reprocesarlo produce el mismo resultado. Los tópicos de M1 y M2 se recomiendan compactados (`cleanup.policy=compact`) para que M3 pueda reconstruir su copia local desde el inicio.
 - **Consumidor**: `groupId` `avicontrol-modulo3`, `auto-offset-reset=earliest`, confirmación manual del offset después de la transacción de base de datos.
-- **Idempotencia**: cada evento lleva `eventId`. Si `registro_sincronizacion` ya tiene ese `id_evento` con resultado `EXITOSA`, el evento se descarta. Además, las escrituras son *upsert* por la llave natural (`id_galpon`, `id_lote`, `id_resultado`, `id_partida_origen`, `id_consumo_origen`); las alertas de vaciado se insertan solo si no existen (son inmutables).
+- **Idempotencia**: cada evento lleva `eventId`. Si `registro_sincronizacion` ya tiene ese `id_evento` (con cualquier resultado), el evento se descarta: un mismo `eventId` siempre trae el mismo contenido. Además, las escrituras son *upsert* por la llave natural (`id_galpon`, `id_lote`, `id_resultado`, `id_partida_origen`, `id_consumo_origen`); las alertas de vaciado se insertan solo si no existen (son inmutables).
 - **Bitácora**: cada evento procesado crea una fila en `registro_sincronizacion` con `fuente`, `topico`, `id_evento`, inicio, fin, resultado y filas afectadas. La "última sincronización exitosa" de una fuente es el `MAX(fecha_hora_fin)` con `resultado = 'EXITOSA'` de esa fuente.
+- **Orden entre tópicos**: Kafka solo garantiza el orden dentro de una partición de un mismo tópico. Un evento de alerta, resultado, partida o consumo puede llegar antes que el evento de `avicontrol.m1.galpones` que trae su lote, sobre todo al arrancar con la base vacía y leer todo el histórico (`earliest`).
+- **Eventos que llegan antes que su lote**: si el evento es válido pero su `idLote` no existe en la copia local, **no es un error**. Se guarda en `evento_pendiente_lote` y su fila de la bitácora queda `PENDIENTE_LOTE`; el offset se confirma. Cuando `procesarGalpon` crea el lote, en la misma transacción aplica sus pendientes en orden de llegada con las mismas reglas de un evento normal, pasa cada fila de la bitácora a `EXITOSA` o `FALLIDA` y borra el pendiente. Un pendiente con más de `sync.umbral-inactividad` horas se registra como advertencia en el log; no se descarta.
 - **Datos inválidos** (CU07.FR-010, CU08.FR-003): el evento se registra como `FALLIDA` con la causa en `descripcion_error`, no sobrescribe la copia local y no se reintenta (es un error de contenido).
-- **Errores técnicos** (base de datos caída, JSON ilegible): 3 reintentos con backoff exponencial (1 s, 2 s, 4 s) y luego el mensaje pasa a `avicontrol.m3.dlt`.
+- **JSON ilegible o sobre incompleto** (sin `header.eventId`): el consumidor usa `ErrorHandlingDeserializer`, así que el mensaje no bloquea la partición. La `DeserializationException` es no reintentable y el mensaje pasa **directo** a `avicontrol.m3.dlt`, sin reintentos.
+- **Errores técnicos** (base de datos caída, broker sin respuesta): 3 reintentos con backoff exponencial (1 s, 2 s, 4 s) y luego el mensaje pasa a `avicontrol.m3.dlt`. Como la transacción se revierte, no queda fila en la bitácora.
+- **Reproceso de la DLT**: cada mensaje de la DLT conserva su clave, su valor y los headers `kafka_dlt-original-topic` y `kafka_dlt-exception-message`. Tras corregir la causa, se vuelve a publicar en su tópico original con la misma clave; la idempotencia por `eventId` hace seguro el reenvío. Para revisarla en local:
+  ```bash
+  docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 \
+    --topic avicontrol.m3.dlt --from-beginning --timeout-ms 10000 \
+    --property print.key=true --property print.headers=true
+  ```
+  Para reenviar un mensaje se usa `kafka-console-producer.sh` sobre el tópico original con `--property parse.key=true`.
 - **Indicador de antigüedad (RT-09)**: si una fuente no tiene eventos exitosos en las últimas `sync.umbral-inactividad` horas (por defecto 24) o el broker no está disponible (`/actuator/health`), la respuesta del API marca esa fuente como desactualizada para que la interfaz lo advierta.
 
 ### C. Sobre JSON de los eventos
@@ -597,7 +632,7 @@ Los `payload` de cada tópico están en el [plan 001](../planes/001-sincronizaci
 2. `PublicarAvisosUtilizacionService` (`@Scheduled(fixedDelayString = "${avisos.intervalo:PT1M}")`) publica los avisos `PENDIENTE` en `avicontrol.m3.avisos-utilizacion`. Si el broker confirma, el aviso pasa a `ENTREGADO`; si falla, sigue `PENDIENTE` y se incrementa `intentos`.
 3. Un fallo del aviso nunca revierte ni bloquea la Liquidación (CU08.FR-007). Anular la Liquidación no retira el aviso.
 
-### E. Exportación a Excel con Apache POI (`poi-ooxml:5.2.5`)
+### E. Exportación a Excel con Apache POI (`poi-ooxml:5.5.1`)
 - **Construcción del Libro**: Uso de `XSSFWorkbook` con una hoja para la Matriz de Venta Final y el Desglose por Categorías (`ALIMENTO`, `MEDICINA`, `POBLACION`).
 - **Formato Monetario COP**: `DataFormat` con la máscara `$#,##0` (sin decimales en totales).
 - **Fórmulas Dinámicas**: Subtotales y total con `Cell.setCellFormula("SUM(...)")`, calculando el rango a partir del número real de partidas.

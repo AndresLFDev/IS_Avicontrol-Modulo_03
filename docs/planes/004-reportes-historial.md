@@ -13,12 +13,12 @@ Este plan aborda la **consulta histórica cronológica** de liquidaciones (`CU06
 
 **Historial (CU06)**: Permite al Administrador Financiero buscar liquidaciones por nombre o UUID de galpón o de lote y filtrarlas por rango de fechas (orden descendente). Es el **único punto de acceso** a las Liquidaciones ya generadas, porque la lista de lotes no muestra los lotes con Liquidación `ACTIVA` (M3-CU01.FR-014). Al seleccionar cualquier fila, el sistema abre la **vista de la Liquidación** (M3-CU03.FR-014), que muestra el registro de anulación si está `ANULADA` — no el desglose directamente. El Desglose se consulta desde la propia vista de la Liquidación (CU06.FR-006).
 
-**Desglose (CU05)**: Visualización de la sección de ingresos y de las partidas agrupadas por categorías de costo — **Alimento**, **Insumos Médicos** y **Costo de Población** — garantizando que los subtotales cuadran exactamente con `costosOperativosCop` de la Liquidación (FR-002). Exportación a `.xlsx` con Apache POI (`poi-ooxml:5.2.5`), solo para Liquidaciones `ACTIVA`.
+**Desglose (CU05)**: Visualización de la sección de ingresos y de las partidas agrupadas por categorías de costo — **Alimento**, **Insumos Médicos** y **Costo de Población** — garantizando que los subtotales cuadran exactamente con `costosOperativosCop` de la Liquidación (FR-002). Exportación a `.xlsx` con Apache POI (`poi-ooxml:5.5.1`), solo para Liquidaciones `ACTIVA`.
 
 ## Technical Context
 
 - **Language/Version**: Java 21 (LTS)
-- **Primary Dependencies**: Spring Boot 4.1.x, Spring Data JPA, Spring Web MVC, Apache POI `poi-ooxml:5.2.5`, JUnit 5, MockMvc
+- **Primary Dependencies**: Spring Boot 4.1.x, Spring Data JPA, Spring Web MVC, Apache POI `poi-ooxml:5.5.1`, JUnit 5, MockMvc
 - **Storage**: Proyección y lectura sobre tablas `liquidacion`, `partida_costo_lote`, `registro_anulacion`, `lote`, `galpon`
 - **Testing**: Unit tests de lógica de proyección/agrupación, tests de generación de Excel con Apache POI y tests REST
 - **Performance Goals**: Generación y descarga de archivo Excel < 10s (CU05.SC-002); consulta de historial < 3s (CU06.SC-001)
@@ -128,10 +128,20 @@ HTTP/1.1 200 OK
       "etiqueta": "Alimento",
       "subtotalCop": 45000000,
       "partidas": [
-        { "concepto": "Engorde", "cantidad": 12500.000, "unidadMedida": "KG", "precioUnitarioCop": 2400.00, "subtotalCop": 30000000, "fuenteOrigen": "MODULO_2", "referenciaOrigen": "REC-2026-118" }
+        { "concepto": "Engorde", "cantidad": 12500.000, "unidadMedida": "KG", "precioUnitarioCop": 2400.00, "subtotalCop": 30000000, "fuenteOrigen": "MODULO_2", "referenciaOrigen": "REC-2026-118" },
+        { "concepto": "Finalizador", "cantidad": 6250.000, "unidadMedida": "KG", "precioUnitarioCop": 2400.00, "subtotalCop": 15000000, "fuenteOrigen": "MODULO_2", "referenciaOrigen": "REC-2026-125" }
       ]
     },
-    { "categoria": "MEDICINA", "etiqueta": "Insumos Médicos", "subtotalCop": 3200000, "partidas": [] },
+    {
+      "categoria": "MEDICINA",
+      "etiqueta": "Insumos Médicos",
+      "subtotalCop": 3200000,
+      "partidas": [
+        { "concepto": "Amoxicilina", "cantidad": 30.000, "unidadMedida": "ML", "precioUnitarioCop": 20000.00, "subtotalCop": 600000, "fuenteOrigen": "MODULO_2", "referenciaOrigen": "REC-2026-090" },
+        { "concepto": "Amoxicilina", "cantidad": 20.000, "unidadMedida": "ML", "precioUnitarioCop": 21000.00, "subtotalCop": 420000, "fuenteOrigen": "MODULO_2", "referenciaOrigen": "REC-2026-101" },
+        { "concepto": "Vacuna Newcastle", "cantidad": 10000.000, "unidadMedida": "UNIDAD", "precioUnitarioCop": 218.00, "subtotalCop": 2180000, "fuenteOrigen": "MODULO_2", "referenciaOrigen": "REC-2026-095" }
+      ]
+    },
     {
       "categoria": "POBLACION",
       "etiqueta": "Costo de Población",

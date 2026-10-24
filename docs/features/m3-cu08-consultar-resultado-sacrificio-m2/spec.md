@@ -31,7 +31,7 @@ Como Módulo 3, quiero recibir de Módulo 2 el resultado final de sacrificio de 
    - **Then** el sistema no almacena el resultado como válido, lo registra como incidencia y mantiene bloqueada la generación de la Liquidación para ese lote
 
 3. **Scenario**: Corrección del resultado antes de ser utilizado
-   - **Given** un resultado final sincronizado que aún no ha sido consumido por ninguna Liquidación `ACTIVA` y que Módulo 2 corrigió
+   - **Given** un resultado final sincronizado que aún no ha sido consumido por ninguna Liquidación (estado `NO_UTILIZADO`) y que Módulo 2 corrigió
    - **When** M3 procesa el evento con la corrección
    - **Then** el sistema actualiza la copia local con las cifras corregidas y conserva la fecha y hora de la nueva sincronización
 
@@ -55,7 +55,7 @@ Como Módulo 3, quiero recibir de Módulo 2 el resultado final de sacrificio de 
 ### Edge Cases
 
 - **Unidad indivisible**: La cantidad final de pollos y el peso total constituyen una sola unidad de información. M3 nunca almacena ni utiliza uno sin el otro.
-- **Corrección posterior al consumo**: Si Módulo 2 corrige el resultado después de que M3 lo consumió en una Liquidación `ACTIVA`, M3 **no** recalcula la Liquidación. El cambio exige anulación formal (M3-CU04). Esta es la razón por la cual el aviso de utilización debe existir.
+- **Corrección posterior al consumo**: Desde que una Liquidación consume el resultado y se emite el aviso de utilización, el resultado es **definitivo**: Módulo 2 no debe corregirlo (D-03) y, si M3 recibe una corrección, la rechaza, la registra como incidencia y conserva las cifras ya utilizadas. Anular la Liquidación no lo libera (M3-CU04): la nueva Liquidación usa el mismo resultado. Esta es la razón por la cual el aviso de utilización debe existir.
 - **Un único resultado por lote**: Módulo 2 registra un solo resultado final por lote. Si M3 recibe más de uno para el mismo lote, lo registra como incidencia y conserva el previamente sincronizado.
 - **Peso promedio**: M3 calcula el peso promedio a partir de estos dos valores únicamente con fines de presentación. El cálculo monetario de M3-CU03 se realiza sobre el peso total.
 
@@ -68,8 +68,8 @@ Como Módulo 3, quiero recibir de Módulo 2 el resultado final de sacrificio de 
 - **FR-001**: El sistema MUST consumir, mediante un proceso automático en segundo plano, los eventos que Módulo 2 publica en Kafka con el resultado final de sacrificio de los lotes con ciclo cerrado.
 - **FR-002**: El sistema MUST obtener y almacenar, como una sola unidad de información: `idResultado`, `idLote`, `idGalpon`, `cantidadFinalPollos`, `pesoTotalKg` y `fechaRegistro`.
 - **FR-003**: El sistema MUST validar que `cantidadFinalPollos` sea un entero mayor que cero y que `pesoTotalKg` sea mayor que cero. Los resultados que no cumplan MUST registrarse como incidencia y NO DEBEN habilitar la generación de la Liquidación.
-- **FR-004**: El sistema MUST actualizar la copia local cuando Módulo 2 corrija un resultado que aún no haya sido consumido por una Liquidación `ACTIVA`.
-- **FR-005**: El sistema NO DEBE recalcular una Liquidación `ACTIVA` ante una corrección posterior del resultado en Módulo 2. Toda corrección exige anulación formal (M3-CU04).
+- **FR-004**: El sistema MUST actualizar la copia local cuando Módulo 2 corrija un resultado que aún no haya sido consumido por ninguna Liquidación (`NO_UTILIZADO`). Si el resultado ya está `UTILIZADO`, el sistema MUST rechazar la corrección, registrarla como incidencia y conservar las cifras utilizadas, aunque la Liquidación que lo consumió se haya anulado.
+- **FR-005**: El sistema NO DEBE recalcular una Liquidación `ACTIVA` ante cambios posteriores en la copia local. El resultado final de sacrificio es definitivo desde su primera utilización (FR-004); la anulación formal (M3-CU04) corrige los datos propios de la Liquidación, como el precio por kg, pero no el resultado.
 - **FR-006**: Al persistir una Liquidación `ACTIVA` que consume un resultado final de sacrificio, el sistema MUST marcar el resultado final asociado como utilizado en su copia local y MUST publicar el aviso de utilización con el identificador del resultado en el tópico `avicontrol.m3.avisos-utilizacion`. Esta es la **única publicación** de M3 hacia un módulo externo en todo el módulo. Cada resultado genera un solo aviso, aunque su Liquidación se anule y se genere otra con el mismo resultado.
 - **FR-007**: El aviso de utilización MUST ser asíncrono e idempotente. Si su publicación falla, el sistema MUST conservar la Liquidación generada, mantener el aviso como pendiente y reintentarlo en segundo plano, sin revertir ni bloquear ninguna operación financiera completada.
 - **FR-008**: Ante la indisponibilidad del broker o la ausencia de eventos de Módulo 2, el sistema MUST conservar íntegra la copia local previa, registrar el fallo y reanudar el consumo desde el último evento confirmado, sin bloquear ninguna operación de M3.

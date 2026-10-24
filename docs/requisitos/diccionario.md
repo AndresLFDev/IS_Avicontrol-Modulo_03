@@ -197,10 +197,10 @@ Bitácora de los eventos Kafka procesados desde Módulo 1 y Módulo 2. Una fila 
 | `id` | `BIGSERIAL` | NO | PK | Identificador único del registro. |
 | `fuente` | `VARCHAR(20)` | NO | CHECK | Módulo emisor (`MODULO_1`, `MODULO_2`). |
 | `topico` | `VARCHAR(100)` | NO | - | Tópico Kafka del que se leyó el evento. |
-| `id_evento` | `UUID` | SI | UQ | `eventId` del sobre; garantiza que un evento se procese una sola vez. Nulo si el sobre no se pudo leer. |
+| `id_evento` | `UUID` | NO | UQ | `eventId` del sobre; garantiza que un evento se procese una sola vez. Un mensaje ilegible o sin `eventId` no crea fila: pasa directo a la DLT. |
 | `fecha_hora_inicio` | `TIMESTAMPTZ` | NO | - | Inicio del procesamiento. |
-| `fecha_hora_fin` | `TIMESTAMPTZ` | SI | - | Fin del procesamiento. |
-| `resultado` | `VARCHAR(20)` | SI | CHECK | `EXITOSA` o `FALLIDA`. |
+| `fecha_hora_fin` | `TIMESTAMPTZ` | SI | - | Fin del procesamiento. Nulo mientras el evento está `PENDIENTE_LOTE`; al aplicarse toma la hora en que se aplicó. |
+| `resultado` | `VARCHAR(20)` | SI | CHECK | `EXITOSA`, `FALLIDA` o `PENDIENTE_LOTE` (`ResultadoSincronizacion`). |
 | `descripcion_error` | `TEXT` | SI | - | Causa del rechazo o del fallo, si ocurrió. |
 | `registros_actualizados` | `INT` | NO | - | Filas creadas o modificadas (Default: 0). |
 
@@ -215,14 +215,27 @@ Captura inmutable, por fuente, de los datos usados al liquidar. Una fila por fue
 | `id_liquidacion` | `BIGINT` | NO | FK→liquidacion | Liquidación asociada. |
 | `id_lote` | `UUID` | NO | FK→lote | Lote liquidado. |
 | `fuente` | `VARCHAR(20)` | NO | - | `MODULO_1` o `MODULO_2`. |
-| `fecha_hora_sync` | `TIMESTAMPTZ` | NO | - | Hora de la sincronización usada (M1: la del lote; M2: la más reciente entre resultado y partidas). |
+| `fecha_hora_sync` | `TIMESTAMPTZ` | NO | - | Hora de la sincronización usada (M1: la del lote; M2: la más reciente entre el resultado, las partidas de alimento y los consumos de medicamento del lote). |
 | `poblacion_inicial` | `INT` | SI | - | Población inicial congelada (solo `MODULO_1`). |
 | `poblacion_actual` | `INT` | SI | - | Población viva congelada (solo `MODULO_1`). |
 | `costo_total_lote_cop` | `BIGINT` | SI | - | Costo inicial del lote congelado (solo `MODULO_1`). |
 
 ---
 
-### D. Tabla `aviso_utilizacion_resultado` (Entidad `AvisoUtilizacionResultado`)
+### D. Tabla `evento_pendiente_lote` (Entidad `EventoPendienteLote`)
+Eventos de Módulo 1 o Módulo 2 que llegaron antes que su lote (Kafka no ordena entre tópicos). Se aplican y se borran cuando el lote llega por `avicontrol.m1.galpones`.
+
+| Campo | Tipo SQL | Nulo | Llave | Descripción |
+| :--- | :--- | :--- | :--- | :--- |
+| `id_evento` | `UUID` | NO | PK, FK→registro_sincronizacion(id_evento) | Evento retenido; su fila de la bitácora está `PENDIENTE_LOTE`. |
+| `id_lote` | `UUID` | NO | - | Lote esperado. Sin FK porque el lote aún no existe. |
+| `topico` | `VARCHAR(100)` | NO | - | Tópico de origen; decide cómo se aplica el evento. |
+| `payload` | `JSONB` | NO | - | Datos del evento ya validados. |
+| `fecha_hora_recepcion` | `TIMESTAMPTZ` | NO | - | Momento de llegada; los pendientes se aplican en este orden. |
+
+---
+
+### E. Tabla `aviso_utilizacion_resultado` (Entidad `AvisoUtilizacionResultado`)
 Aviso saliente hacia Módulo 2 (tópico `avicontrol.m3.avisos-utilizacion`) indicando que el resultado de sacrificio fue consumido. Funciona como *outbox*.
 
 | Campo | Tipo SQL | Nulo | Llave | Descripción |
@@ -259,7 +272,7 @@ Los códigos se almacenan y exponen en mayúsculas con guion bajo. La traducció
 
 ### `EstadoUtilizacion` (Enum)
 - **`NO_UTILIZADO`**: Resultado de sacrificio aún no consumido por ninguna liquidación.
-- **`UTILIZADO`**: Resultado consumido por una liquidación (se mantiene aunque esta se anule).
+- **`UTILIZADO`**: Resultado consumido por una liquidación. Es definitivo: se mantiene aunque la liquidación se anule y M3 rechaza las correcciones de M2 (CU08.FR-004).
 
 ### `EstadoValorizacion` (Enum)
 - **`VALORIZADA`**: La partida o tramo tiene precio unitario.
@@ -280,7 +293,8 @@ Los códigos se almacenan y exponen en mayúsculas con guion bajo. La traducció
 
 ### `ResultadoSincronizacion` (Enum)
 - **`EXITOSA`**: Evento procesado correctamente.
-- **`FALLIDA`**: Evento rechazado por contenido inválido o por error de procesamiento.
+- **`FALLIDA`**: Evento rechazado por contenido inválido.
+- **`PENDIENTE_LOTE`**: Evento válido cuyo lote aún no está en la copia local; espera en `evento_pendiente_lote` y pasa a `EXITOSA` o `FALLIDA` cuando llega el lote.
 
 ### `CausaNoLiquidable` (Enum, campo `causa` del error `422`)
 - **`SIN_ALERTA_VACIADO`**, **`SIN_RESULTADO_SACRIFICIO`**, **`SIN_PARTIDAS_ALIMENTO`**, **`PARTIDAS_SIN_PRECIO`**.

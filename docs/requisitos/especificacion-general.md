@@ -144,7 +144,7 @@ Estas decisiones bloquean la implementación y deben resolverse en mesa conjunta
 | :--- | :--- | :--- | :--- |
 | D-01 | Criterio de costeo del alimento: compras, consumo real o requerimiento proyectado | M3-CU03, M3-CU09 | Módulo 2 |
 | D-02 | Exposición formal de población inicial, población actual, costo del lote, estado y alerta de vaciado sanitario | M3-CU07 | Módulo 1 |
-| D-03 | Formato y confirmación del aviso de utilización del resultado final de sacrificio (el transporte es Kafka, tópico `avicontrol.m3.avisos-utilizacion`) | M3-CU08 | Módulo 2 |
+| D-03 | Formato y confirmación del aviso de utilización del resultado final de sacrificio (el transporte es Kafka, tópico `avicontrol.m3.avisos-utilizacion`), y que Módulo 2 no corrija un resultado ya avisado: para M3 es definitivo aunque la Liquidación se anule | M3-CU08 | Módulo 2 |
 | D-04 | Ruta de estado para liquidar un lote con mortalidad total | M3-CU03, M3-CU07 | Módulo 1 |
 | D-05 | Tratamiento del impuesto informado por Módulo 2: ¿los costos operativos se calculan sobre valor neto o con impuesto? | M3-CU03, M3-CU09, M3-CU10 | Módulo 2 |
 | D-06 | Registro de mortalidad ocurrida fuera del estado `Productivo` | M3-CU03, M3-CU07 | Módulo 1 |

@@ -35,16 +35,19 @@ Se evalúan en este orden, en la vista previa **y** en la confirmación:
 
 | # | Validación | Error |
 |---|---|---|
-| 1 | `usuario` presente; `precioKgCop > 0` si no es siniestro total; `precioKgCop` ausente si es siniestro total | `400 validacion` |
+| 1 | Formato del body (Bean Validation en el Request): `usuario` de 3 a 100 caracteres; `precioKgCop`, si viene, `> 0` | `400 validacion` |
 | 2 | El lote existe en la copia local | `404 lote-no-encontrado` |
-| 3 | El lote no tiene Liquidación `ACTIVA` | `409 liquidacion-ya-existente` (con `idLiquidacionActiva`) |
-| 4 | Existe alerta de vaciado sanitario del lote | `422` `causa = SIN_ALERTA_VACIADO` |
-| 5 | Existe resultado de sacrificio válido, **o** `poblacion_actual = 0` (siniestro total) | `422` `causa = SIN_RESULTADO_SACRIFICIO` |
-| 6 | Existe al menos una partida de alimento | `422` `causa = SIN_PARTIDAS_ALIMENTO` |
-| 7 | Ninguna partida de alimento ni tramo de medicamento está `PENDIENTE_PRECIO` | `422` `causa = PARTIDAS_SIN_PRECIO` (con `partidasPendientes`) |
-| 8 | Solo en la confirmación: `huellaDatos` coincide con la recalculada | `409 vista-previa-desactualizada` |
+| 3 | Precio coherente con el lote: obligatorio si no es siniestro total, ausente si lo es | `400 validacion` |
+| 4 | El lote no tiene Liquidación `ACTIVA` | `409 liquidacion-ya-existente` (con `idLiquidacionActiva`) |
+| 5 | Existe alerta de vaciado sanitario del lote | `422` `causa = SIN_ALERTA_VACIADO` |
+| 6 | Existe resultado de sacrificio válido, **o** `poblacion_actual = 0` (siniestro total) | `422` `causa = SIN_RESULTADO_SACRIFICIO` |
+| 7 | Existe al menos una partida de alimento | `422` `causa = SIN_PARTIDAS_ALIMENTO` |
+| 8 | Ninguna partida de alimento ni tramo de medicamento está `PENDIENTE_PRECIO` | `422` `causa = PARTIDAS_SIN_PRECIO` (con `partidasPendientes`) |
+| 9 | Solo en la confirmación: `huellaDatos` coincide con la recalculada | `409 vista-previa-desactualizada` |
 
-**Siniestro total** = `lote.poblacion_actual = 0` (no "ausencia de resultado"). Un lote sin resultado de sacrificio y con aves vivas no es siniestro: falla en la validación 5.
+La validación 3 va después del `404` porque depende del lote: solo con su `poblacion_actual` se sabe si es siniestro total.
+
+**Siniestro total** = `lote.poblacion_actual = 0` (no "ausencia de resultado"). Un lote sin resultado de sacrificio y con aves vivas no es siniestro: falla en la validación 6.
 
 ---
 
@@ -372,7 +375,7 @@ public class GenerarLiquidacionService implements PreviewLiquidacionUseCase, Gen
     @Override
     @Transactional(readOnly = true)
     public LiquidacionPreviaDto calcularVistaPrevia(GenerarLiquidacionCommand cmd) {
-        var datos = cargarYValidar(cmd);                 // precondiciones 1 a 7; no persiste nada
+        var datos = cargarYValidar(cmd);                 // precondiciones 2 a 8; no persiste nada
         var calculo = CalculoLiquidacion.de(datos, cmd.precioKgCop());
         return LiquidacionMapper.toPreviaDto(datos, calculo, datos.huella(cmd.precioKgCop()));
     }
@@ -382,7 +385,7 @@ public class GenerarLiquidacionService implements PreviewLiquidacionUseCase, Gen
     public LiquidacionDto generarLiquidacion(GenerarLiquidacionCommand cmd) {
         var datos = cargarYValidar(cmd);                 // FR-015: las validaciones se repiten al confirmar
         if (!datos.huella(cmd.precioKgCop()).equals(cmd.huellaDatos())) {
-            throw new VistaPreviaDesactualizadaException(cmd.idLote());   // precondición 8
+            throw new VistaPreviaDesactualizadaException(cmd.idLote());   // precondición 9
         }
         var calculo = CalculoLiquidacion.de(datos, cmd.precioKgCop());
         var liq = Liquidacion.crearActiva(datos, calculo, cmd.usuario(), clock.instant());
@@ -442,10 +445,10 @@ public class AnularLiquidacionService implements AnularLiquidacionUseCase {
             throw new LiquidacionYaAnuladaException(idLiquidacion, anulacionRepository.buscarPorLiquidacion(idLiquidacion));
         }
 
-        // FR-003: motivo 10–500 caracteres sin contar espacios iniciales/finales (validado también en el Request)
+        // FR-003: motivo y usuario llegan recortados y validados desde AnulacionRequest
         // FR-006: solo cambia el estado; la versión (@Version) detecta anulaciones concurrentes → 409
         liq.anular();
-        var registro = RegistroAnulacion.crear(liq.id(), motivo.strip(), clock.instant(), usuario.strip());
+        var registro = RegistroAnulacion.crear(liq.id(), motivo, clock.instant(), usuario);
         liquidacionRepository.guardar(liq);
         anulacionRepository.guardar(registro);
 
@@ -491,7 +494,18 @@ public class LiquidacionController {
 }
 ```
 
-`VistaPreviaRequest`, `GenerarLiquidacionRequest` (añade `huellaDatos` obligatorio) y `AnulacionRequest` validan `usuario` con `@NotBlank @Size(min = 3, max = 100)`, `precioKgCop` con `@Positive` y `motivo` con `@NotBlank @Size(min = 10, max = 500)`.
+`VistaPreviaRequest`, `GenerarLiquidacionRequest` (añade `huellaDatos` obligatorio) y `AnulacionRequest` validan `usuario` con `@NotBlank @Size(min = 3, max = 100)`, `precioKgCop` con `@Positive` y `motivo` con `@NotBlank @Size(min = 10, max = 500)`. Para que los rangos se midan sin los espacios del inicio y del final (FR-003, [Identidad del usuario](../arquitectura/general.md#identidad-del-usuario)), cada Request recorta `usuario` y `motivo` en su constructor compacto; Jackson construye el record y Bean Validation lo valida después, ya recortado:
+
+```java
+public record AnulacionRequest(String motivo, String usuario) {
+    public AnulacionRequest {
+        motivo = motivo == null ? null : motivo.strip();
+        usuario = usuario == null ? null : usuario.strip();
+    }
+}
+```
+
+Las anotaciones van sobre los componentes del record (`@NotBlank @Size(min = 10, max = 500) String motivo`); se omiten aquí para abreviar.
 
 ---
 
@@ -507,7 +521,7 @@ public class LiquidacionController {
 ## Phase 2: CU03 — Cálculo y Vista Previa (sin persistir)
 
 - [ ] **T005** Unit Test `CalculoLiquidacionTest.java`: Caso Dorado de CU03 esc. 1 (107.100.000 / 500 aves / 5,56 % / 22.100.000), ejemplo del plan (139.200.000 / 4,00 %), siniestro total, redondeo `HALF_UP`, costo de población como partida única.
-- [ ] **T006** Unit Test `PreviewLiquidacionServiceTest.java`: las 7 precondiciones con su error, siniestro total por población 0, lote sin resultado y con aves vivas → `SIN_RESULTADO_SACRIFICIO`, huella estable para los mismos datos, y que **no se persiste nada**.
+- [ ] **T006** Unit Test `PreviewLiquidacionServiceTest.java`: las precondiciones 1 a 8 con su error (el precio se valida después del `404`), siniestro total por población 0, lote sin resultado y con aves vivas → `SIN_RESULTADO_SACRIFICIO`, huella estable para los mismos datos, y que **no se persiste nada**.
 - [ ] **T007** Implementar `PreviewLiquidacionUseCase` y la vista previa en `GenerarLiquidacionService.java`; Controller Test e implementación de `POST /api/v1/liquidaciones/previa` (responde 200, no 201).
 
 ---
