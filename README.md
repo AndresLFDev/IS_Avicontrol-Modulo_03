@@ -32,11 +32,11 @@ El Módulo 3 se encarga de determinar la rentabilidad real de cada lote avícola
 ### Casos de Uso del Módulo:
 
 #### 🧑‍💼 Funcionales (Administrador Financiero)
-1. **M3-CU01 – Consultar Lista de Lotes (P1):** Consulta de los lotes y su etapa (productivo, en cosecha, aislamiento, por liquidar, liquidado) para generar o ver su Liquidación.
+1. **M3-CU01 – Consultar Lista de Lotes (P1):** Consulta de los lotes pendientes de liquidar y su etapa (productivo, en cosecha, aislamiento, por liquidar) para generar su Liquidación. Los lotes ya liquidados se consultan en el historial.
 2. **M3-CU03 – Generar Liquidación del Lote (P1):** Ingreso del precio/kg y cálculo de Venta Bruta, Mortalidad, Costos Operativos y Utilidad Neta, presentados como Matriz de Venta Final.
 3. **M3-CU04 – Anular Liquidación (P1):** Flujo formal de anulación de liquidaciones con justificación y auditoría.
 4. **M3-CU05 – Consultar Desglose de Ventas y Gastos (P2):** Detalle auditado por partida y exportación a formato Excel (.xlsx).
-5. **M3-CU06 – Consultar Historial de Liquidaciones (P3):** Consulta histórica con filtros por fecha y galpón para análisis comparativo entre ciclos.
+5. **M3-CU06 – Consultar Historial de Liquidaciones (P3):** Consulta histórica con búsqueda por galpón o lote y filtro por rango de fechas para análisis comparativo entre ciclos.
 
 #### 🔌 Integración Externa (Módulos 1 y 2)
 6. **M3-CU07 – Consultar Galpón y Lote al Módulo 1 (P1)**
@@ -53,4 +53,4 @@ El Módulo 3 se encarga de determinar la rentabilidad real de cada lote avícola
 Este proyecto sigue el marco de **Specification-Driven Development (SDD)**:
 1. **Fase 1 (SPEC):** Especificaciones atómicas y autocontenidas (`docs/features/`).
 2. **Fase 2 (PLAN):** Diseño técnico de arquitectura, modelos y contratos de integración (`docs/planes/` y `docs/arquitectura/general.md`).
-3. **Fase 3 (Implementación):** Desarrollo en Java 21 (LTS), Gradle y pruebas unitarias con JUnit 5 / Spring Boot Test.
+3. **Fase 3 (Implementación):** Desarrollo en Java 21 (LTS) con Spring Boot y Gradle, PostgreSQL, integración con los módulos 1 y 2 por eventos Apache Kafka y pruebas con JUnit 5, Spring Boot Test y Testcontainers.

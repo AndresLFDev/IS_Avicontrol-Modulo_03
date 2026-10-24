@@ -1,7 +1,7 @@
 # Feature Specification: M3-CU05 – Consultar Desglose de Ventas y Gastos
 
 **Created**: 2026-08-31  
-**Actualizado**: 2026-10-03  
+**Actualizado**: 2026-10-23  
 **Módulo**: 3 – Liquidación de Lote y Análisis de Rentabilidad (AVICONTROL)  
 **Rol Principal**: Administrador Financiero  
 
@@ -76,7 +76,7 @@ Como administrador financiero, quiero consultar en pantalla y exportar a Excel e
 
 - **Liquidacion**: Documento de resultado consultado por esta especificación. Definida en M3-CU03.
 - **PartidaCostoLote**: Partida de costo valorizada asociada al ciclo del lote, origen de cada fila del desglose. Definida en M3-CU03.
-- **ArchivoExportacion**: Documento generado en formato `.xlsx`, con metadatos de exportación (`nombreArchivo`, `fechaHoraExportacion`, `usuarioGenerador`). No contiene datos financieros propios.
+- **ArchivoExportacion**: Documento generado en formato `.xlsx`, con metadatos de exportación (`nombreArchivo`, `fechaHoraExportacion`). No se almacena ni contiene datos financieros propios.
 
 > **Nota**: La entidad `DesgloseLiquidacion` de la versión anterior de esta especificación se elimina. El desglose se modela como proyección derivada para evitar la duplicación de datos y el riesgo de descuadre frente a la Liquidación (FR-002).
 

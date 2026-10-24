@@ -114,13 +114,13 @@ Para indicar un cambio incompatible se agrega `!` después del alcance (`feat(ap
 
 | Alcance | Área |
 |---|---|
-| `costos` | Costos de crianza: alimento, insumos médicos y población inicial (3.1) |
-| `venta` | Venta bruta: pollos finales × peso promedio × precio/kg (3.2) |
-| `liquidacion` | Cierre del lote: mortalidad, costos operativos y utilidad neta (3.2) |
+| `costos` | Costos de crianza: alimento, insumos médicos y costo de población (3.1) |
+| `venta` | Venta bruta: peso total kg × precio/kg (3.2, M3-CU03.FR-001) |
+| `liquidacion` | Lista de lotes y cierre del lote: mortalidad, costos operativos, utilidad neta, generar y anular (3.2) |
 | `reportes` | Reporte de rentabilidad: costos frente a ingresos, comparación por galpón |
-| `integracion` | Lectura de datos de los módulos 1 y 2 |
+| `integracion` | Consumo de los eventos Kafka de los módulos 1 y 2 y aviso de utilización a M2 |
 
-Un alcance funcional cubre backend y frontend: `feat(liquidacion)` puede tocar el paquete `liquidacion` del backend y `frontend/src/features/liquidacion/` en el mismo commit.
+Un alcance funcional cubre backend y frontend: `feat(liquidacion)` puede tocar las clases de liquidación del backend y `frontend/src/features/liquidacion/` en el mismo commit. El backend se organiza por capas, no por área (ver [estructura del repositorio](docs/proceso/estructura-repositorio.md#áreas-funcionales-y-alcances-de-commit)).
 
 **Técnicos:**
 
@@ -129,7 +129,7 @@ Un alcance funcional cubre backend y frontend: `feat(liquidacion)` puede tocar e
 | `api` | Capa de endpoints (`backend/.../adapter/rest/`) y cliente HTTP del frontend (`frontend/src/shared/api/`) |
 | `db` | Esquema, migraciones y seeds (`backend/src/main/resources/db/`) |
 | `ui` | Componentes, layout y estilos compartidos del frontend (`frontend/src/app/`, `shared/`, `styles/`) |
-| `config` | Configuración del proyecto (Maven, Vite, Spring, compose, CI) |
+| `config` | Configuración del proyecto (Gradle, Vite, Spring, Kafka, compose, CI) |
 
 **Documentación:**
 

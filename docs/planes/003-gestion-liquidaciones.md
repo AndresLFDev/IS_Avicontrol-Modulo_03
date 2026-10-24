@@ -1,7 +1,8 @@
 # Implementation Plan: Gestión del Ciclo de Vida de Liquidaciones
 
 **Date**: 2026-09-28  
-**Actualizado**: 2026-10-05  
+**Actualizado**: 2026-10-23  
+**Arquitectura, DDL y catálogo de errores**: [general.md](../arquitectura/general.md)  
 **Specs**:
 - [m3-cu03-generar-liquidacion](../features/m3-cu03-generar-liquidacion/spec.md) – Generar Liquidación del Lote  
 - [m3-cu04-anular-liquidacion](../features/m3-cu04-anular-liquidacion/spec.md) – Anular Liquidación  
@@ -10,49 +11,40 @@
 
 Este plan cubre el núcleo de dominio del Módulo 3: la **generación inmutable de la Liquidación** de un lote (`CU03`) y su **anulación auditable** (`CU04`).
 
-**Generación en dos pasos (CU03.FR-015)**: El usuario ingresa primero el precio por kg (paso 1 — captura); el sistema genera una **vista previa no persistida** que muestra la Matriz de Venta Final con todos los indicadores (paso 2 — vista previa); el usuario confirma "Generar liquidación" para persistir. "Volver" regresa sin crear ningún registro. La vista previa se identifica con el aviso "Vista previa · sin generar" — que **no es un estado** de la Liquidación.
+**Generación en dos pasos (CU03.FR-015)**: El usuario ingresa primero el precio por kg y su nombre como usuario responsable (paso 1 — captura); el sistema genera una **vista previa no persistida** que muestra la Matriz de Venta Final con todos los indicadores (paso 2 — vista previa); el usuario confirma "Generar liquidación" para persistir. "Volver" regresa sin crear ningún registro. La vista previa se identifica con el aviso "Vista previa · sin generar" — que **no es un estado** de la Liquidación. La vista previa devuelve una `huellaDatos` que la confirmación reenvía para garantizar que se persiste exactamente lo mostrado.
 
-**Consulta de Liquidación existente (CU03.FR-014)**: Desde la lista de lotes (acción "Ver liquidación") o desde el historial, se abre la vista de la Liquidación (`ACTIVA` o `ANULADA`) con la Matriz de Venta Final, subtotales por categoría (Alimento, Insumos Médicos, Costo de Población), fecha de sincronización de cada fuente y — si está `ACTIVA` — el botón para iniciar la anulación (CU04.FR-002b).
+**Consulta de Liquidación existente (CU03.FR-014)**: Desde el historial (plan 004) o justo después de generarla, se abre la vista de la Liquidación (`ACTIVA` o `ANULADA`) con la Matriz de Venta Final, subtotales por categoría (Alimento, Insumos Médicos, Costo de Población), fecha de sincronización de cada fuente, el botón para iniciar la anulación si está `ACTIVA` (CU04.FR-002b) y el registro de anulación si está `ANULADA`. La lista de lotes no ofrece acceso a Liquidaciones (M3-CU01.FR-004).
 
-**Anulación (CU04)**: Se inicia exclusivamente desde la vista de una Liquidación `ACTIVA`. Requiere motivo justificado (10-500 caracteres), confirmación explícita y opera en transacción atómica. Preserva el registro histórico sin borrar filas y rehabilita el lote para una nueva liquidación.
+**Anulación (CU04)**: Se inicia exclusivamente desde la vista de una Liquidación `ACTIVA`. Requiere motivo justificado (10-500 caracteres), el nombre del usuario responsable y confirmación explícita, y opera en transacción atómica. Preserva el registro histórico sin borrar filas y rehabilita el lote para una nueva liquidación.
 
 Calcula Venta Bruta, Mortalidad del Lote, Costos Operativos y Utilidad Neta con redondeo `HALF_UP` a enteros COP y 2 decimales para porcentajes. Bloquea duplicados activos (índice único parcial `uq_lote_activa`).
 
 ## Technical Context
 
 - **Language/Version**: Java 21 (LTS)
-- **Primary Dependencies**: Spring Boot 3.3.x, Spring Data JPA, Spring Web MVC, Jakarta Validation, Flyway (`V3__create_liquidacion_tables.sql`), JUnit 5, MockMvc
-- **Storage**: PostgreSQL / H2 en memoria (`liquidacion`, `partida_costo_lote`, `snapshot_datos_origen`, `registro_anulacion`)
-- **Testing**: Unit tests exhaustivos del cálculo financiero y pruebas de integración REST end-to-end
+- **Primary Dependencies**: Spring Boot 3.3.x, Spring Data JPA, Spring Web MVC, Jakarta Validation, Flyway (`V3__create_liquidacion_tables.sql`, DDL en la arquitectura general), JUnit 5, MockMvc
+- **Storage**: PostgreSQL (`liquidacion`, `partida_costo_lote`, `snapshot_datos_origen`, `registro_anulacion`, `aviso_utilizacion_resultado`)
+- **Testing**: Unit tests exhaustivos del cálculo financiero y pruebas de integración REST con Testcontainers
 - **Target Platform**: JVM 21 / REST API
 
 ---
 
-## Esquema SQL DDL (Flyway V3)
+## Precondiciones de la Generación (CU03.FR-005, FR-006, FR-007, FR-009)
 
-```sql
-CREATE TABLE liquidacion (
-    id_liquidacion      BIGSERIAL PRIMARY KEY,
-    id_lote             UUID NOT NULL REFERENCES lote(id_lote),
-    id_galpon           UUID NOT NULL REFERENCES galpon(id_galpon),
-    id_resultado_sacrificio UUID REFERENCES resultado_final_sacrificio(id_resultado),
-    pollos_vendidos     INT,
-    peso_total_kg       NUMERIC(12,2),
-    peso_promedio_kg    NUMERIC(8,4),
-    precio_kg_cop       NUMERIC(14,2),       -- NULL en siniestro total
-    venta_bruta_cop     BIGINT NOT NULL,
-    mortalidad_aves     INT NOT NULL,
-    porcentaje_mortalidad NUMERIC(5,2) NOT NULL,
-    costos_operativos_cop BIGINT NOT NULL,
-    utilidad_neta_cop   BIGINT NOT NULL,
-    estado              VARCHAR(10) NOT NULL DEFAULT 'ACTIVA',
-    fecha_hora_generacion TIMESTAMP NOT NULL,
-    usuario_responsable VARCHAR(100) NOT NULL,
-    CONSTRAINT chk_estado CHECK (estado IN ('ACTIVA', 'ANULADA'))
-);
+Se evalúan en este orden, en la vista previa **y** en la confirmación:
 
-CREATE UNIQUE INDEX uq_lote_activa ON liquidacion(id_lote) WHERE estado = 'ACTIVA';  -- solo una ACTIVA por lote
-```
+| # | Validación | Error |
+|---|---|---|
+| 1 | `usuario` presente; `precioKgCop > 0` si no es siniestro total; `precioKgCop` ausente si es siniestro total | `400 validacion` |
+| 2 | El lote existe en la copia local | `404 lote-no-encontrado` |
+| 3 | El lote no tiene Liquidación `ACTIVA` | `409 liquidacion-ya-existente` (con `idLiquidacionActiva`) |
+| 4 | Existe alerta de vaciado sanitario del lote | `422` `causa = SIN_ALERTA_VACIADO` |
+| 5 | Existe resultado de sacrificio válido, **o** `poblacion_actual = 0` (siniestro total) | `422` `causa = SIN_RESULTADO_SACRIFICIO` |
+| 6 | Existe al menos una partida de alimento | `422` `causa = SIN_PARTIDAS_ALIMENTO` |
+| 7 | Ninguna partida de alimento ni tramo de medicamento está `PENDIENTE_PRECIO` | `422` `causa = PARTIDAS_SIN_PRECIO` (con `partidasPendientes`) |
+| 8 | Solo en la confirmación: `huellaDatos` coincide con la recalculada | `409 vista-previa-desactualizada` |
+
+**Siniestro total** = `lote.poblacion_actual = 0` (no "ausencia de resultado"). Un lote sin resultado de sacrificio y con aves vivas no es siniestro: falla en la validación 5.
 
 ---
 
@@ -65,11 +57,12 @@ POST /api/v1/liquidaciones/previa
 
 {
   "idLote": "a1b2c3d4-e89b-12d3-a456-426614174000",
-  "idGalpon": "f1e2d3c4-e89b-12d3-a456-426614174000",
   "precioKgCop": 5800.00,
-  "usuario": "jgr@avicontrol.co"
+  "usuario": "Juan Grau"
 }
 ```
+
+El galpón no se envía: se toma de la alerta de vaciado sanitario del lote.
 
 ### Paso 2 — Vista Previa (Response — NO se persiste)
 
@@ -79,8 +72,10 @@ HTTP/1.1 200 OK
   "esVistaPrevia": true,
   "aviso": "Vista previa · sin generar",
   "idLote": "a1b2c3d4-e89b-12d3-a456-426614174000",
+  "idGalpon": "f1e2d3c4-e89b-12d3-a456-426614174000",
   "nombreLote": "Lote Norte Ciclo 4",
   "nombreGalpon": "Galpón Norte",
+  "siniestroTotal": false,
   "precioKgCop": 5800.00,
   "pollosVendidos": 9600,
   "pesoTotalKg": 24000.00,
@@ -96,7 +91,8 @@ HTTP/1.1 200 OK
   "costosOperativosCop": 60200000,
   "utilidadNetaCop": 79000000,
   "fechaSincronizacionM1": "2026-10-01T08:00:00Z",
-  "fechaSincronizacionM2": "2026-10-02T14:30:00Z"
+  "fechaSincronizacionM2": "2026-10-02T14:30:00Z",
+  "huellaDatos": "9f2c1e7a4b0d3c58e6a1f7b2d4c9e0a35b8f6d1c2e7a9b4f0d3c6e8a1b5f7d2c"
 }
 ```
 
@@ -107,9 +103,9 @@ POST /api/v1/liquidaciones
 
 {
   "idLote": "a1b2c3d4-e89b-12d3-a456-426614174000",
-  "idGalpon": "f1e2d3c4-e89b-12d3-a456-426614174000",
   "precioKgCop": 5800.00,
-  "usuario": "jgr@avicontrol.co"
+  "usuario": "Juan Grau",
+  "huellaDatos": "9f2c1e7a4b0d3c58e6a1f7b2d4c9e0a35b8f6d1c2e7a9b4f0d3c6e8a1b5f7d2c"
 }
 
 HTTP/1.1 201 Created
@@ -137,45 +133,35 @@ Location: /api/v1/liquidaciones/42
   "costosOperativosCop": 60200000,
   "utilidadNetaCop": 79000000,
   "fechaHoraGeneracion": "2026-10-03T11:00:00Z",
-  "usuarioResponsable": "jgr@avicontrol.co",
+  "usuarioResponsable": "Juan Grau",
   "fechaSincronizacionM1": "2026-10-01T08:00:00Z",
   "fechaSincronizacionM2": "2026-10-02T14:30:00Z",
+  "registroAnulacion": null,
   "accionesDisponibles": ["VER_DESGLOSE", "ANULAR"]
 }
 ```
 
-El cuerpo del `201` es el mismo `LiquidacionDto` que devuelve `GET /api/v1/liquidaciones/{id}`; la cabecera `Location` apunta a esa consulta. A partir de este momento el lote deja de aparecer en `GET /api/v1/lotes` (M3-CU01.FR-014).
+El cuerpo del `201` es el mismo `LiquidacionDto` que devuelve `GET /api/v1/liquidaciones/{id}`; la cabecera `Location` apunta a esa consulta. A partir de este momento el lote deja de aparecer en `GET /api/v1/lotes` (M3-CU01.FR-014). `fechaSincronizacionM1` y `fechaSincronizacionM2` salen del `snapshot_datos_origen` congelado.
 
 ### Consulta de Liquidación Existente (FR-014)
 
+`GET /api/v1/liquidaciones/{id}` devuelve el mismo `LiquidacionDto`. Para una Liquidación `ANULADA`:
+
 ```json
-GET /api/v1/liquidaciones/42
+GET /api/v1/liquidaciones/40
 
 HTTP/1.1 200 OK
 {
-  "idLiquidacion": 42,
-  "estado": "ACTIVA",
-  "nombreLote": "Lote Norte Ciclo 4",
-  "nombreGalpon": "Galpón Norte",
-  "precioKgCop": 5800.00,
-  "pollosVendidos": 9600,
-  "pesoTotalKg": 24000.00,
-  "pesoPromedioKg": 2.50,
-  "ventaBrutaCop": 139200000,
-  "mortalidadAves": 400,
-  "porcentajeMortalidad": 4.00,
-  "subtotalesCategoria": {
-    "alimento": 45000000,
-    "insumosMedicos": 3200000,
-    "costoPoblacion": 12000000
+  "idLiquidacion": 40,
+  "estado": "ANULADA",
+  "...": "mismos campos de la Matriz de Venta Final, congelados",
+  "registroAnulacion": {
+    "idAnulacion": 7,
+    "motivo": "Error en el precio por kg ingresado. Se corrige en nueva liquidación.",
+    "fechaHoraAnulacion": "2026-10-03T12:00:00Z",
+    "usuarioResponsable": "Juan Grau"
   },
-  "costosOperativosCop": 60200000,
-  "utilidadNetaCop": 79000000,
-  "fechaHoraGeneracion": "2026-10-03T11:00:00Z",
-  "usuarioResponsable": "jgr@avicontrol.co",
-  "fechaSincronizacionM1": "2026-10-01T08:00:00Z",
-  "fechaSincronizacionM2": "2026-10-02T14:30:00Z",
-  "accionesDisponibles": ["VER_DESGLOSE", "ANULAR"]
+  "accionesDisponibles": ["VER_DESGLOSE"]
 }
 ```
 
@@ -184,11 +170,29 @@ HTTP/1.1 200 OK
 ```json
 HTTP/1.1 409 Conflict
 {
-  "type": "https://avicontrol.co/errors/liquidacion-duplicada",
-  "title": "Liquidación duplicada",
+  "type": "https://avicontrol.edu.co/errors/liquidacion-ya-existente",
+  "title": "Conflicto de Liquidación",
   "status": 409,
-  "detail": "El lote a1b2c3d4-e89b-12d3-a456-426614174000 ya tiene una Liquidación ACTIVA (id=42). Anúlala antes de generar una nueva.",
-  "instance": "/api/v1/liquidaciones"
+  "detail": "El lote a1b2c3d4-e89b-12d3-a456-426614174000 ya tiene una Liquidación ACTIVA (ID: 42). Anúlela antes de generar una nueva.",
+  "instance": "/api/v1/liquidaciones",
+  "timestamp": "2026-10-03T11:02:00Z",
+  "idLiquidacionActiva": 42
+}
+```
+
+El frontend usa `idLiquidacionActiva` para ofrecer "Ver liquidación" o "Anular" (CU03 esc. 8).
+
+### Error — Vista Previa Desactualizada (409 Conflict)
+
+```json
+HTTP/1.1 409 Conflict
+{
+  "type": "https://avicontrol.edu.co/errors/vista-previa-desactualizada",
+  "title": "Los datos cambiaron",
+  "status": 409,
+  "detail": "Los datos sincronizados del lote cambiaron después de la vista previa. Revise la nueva vista previa antes de confirmar.",
+  "instance": "/api/v1/liquidaciones",
+  "timestamp": "2026-10-03T11:03:00Z"
 }
 ```
 
@@ -196,14 +200,14 @@ HTTP/1.1 409 Conflict
 
 ```json
 POST /api/v1/liquidaciones/previa
-{ "idLote": "a1b2c3d4-e89b-12d3-a456-426614174000", "idGalpon": "f1e2d3c4-e89b-12d3-a456-426614174000", "precioKgCop": 0, "usuario": "jgr@avicontrol.co" }
+{ "idLote": "a1b2c3d4-e89b-12d3-a456-426614174000", "precioKgCop": 0, "usuario": "Juan Grau" }
 
 HTTP/1.1 400 Bad Request
 {
   "type": "https://avicontrol.edu.co/errors/validacion",
-  "title": "Datos inválidos",
+  "title": "Error de validación",
   "status": 400,
-  "detail": "La solicitud contiene campos inválidos.",
+  "detail": "La solicitud contiene parámetros inválidos.",
   "instance": "/api/v1/liquidaciones/previa",
   "timestamp": "2026-10-03T10:58:00Z",
   "errores": [
@@ -212,9 +216,9 @@ HTTP/1.1 400 Bad Request
 }
 ```
 
-Mismo formato para `motivo` vacío en la anulación (`PUT .../anulacion`) y para UUID mal formados.
+Mismo formato para `usuario` vacío, `motivo` fuera de 10–500 caracteres en la anulación y UUID mal formados.
 
-### Error — Lote o Liquidación No Encontrados (404 Not Found)
+### Error — Liquidación No Encontrada (404 Not Found)
 
 ```json
 GET /api/v1/liquidaciones/999
@@ -222,9 +226,9 @@ GET /api/v1/liquidaciones/999
 HTTP/1.1 404 Not Found
 {
   "type": "https://avicontrol.edu.co/errors/liquidacion-no-encontrada",
-  "title": "Liquidación no encontrada",
+  "title": "Recurso no encontrado",
   "status": 404,
-  "detail": "No existe una Liquidación con id 999.",
+  "detail": "No se encontró la liquidación con ID 999.",
   "instance": "/api/v1/liquidaciones/999",
   "timestamp": "2026-10-03T11:05:00Z"
 }
@@ -238,13 +242,14 @@ HTTP/1.1 422 Unprocessable Entity
   "type": "https://avicontrol.edu.co/errors/lote-no-liquidable",
   "title": "Lote no apto para liquidar",
   "status": 422,
-  "detail": "El lote a1b2c3d4-e89b-12d3-a456-426614174000 está en etapa PRODUCTIVO; solo se liquidan lotes POR_LIQUIDAR con resultado final de sacrificio o en siniestro total.",
-  "instance": "/api/v1/liquidaciones",
-  "timestamp": "2026-10-03T11:06:00Z"
+  "detail": "El lote no cuenta con resultado final de sacrificio sincronizado desde Módulo 2. No es posible liquidar",
+  "instance": "/api/v1/liquidaciones/previa",
+  "timestamp": "2026-10-03T11:06:00Z",
+  "causa": "SIN_RESULTADO_SACRIFICIO"
 }
 ```
 
-Aplica también si no hay partidas de costo sincronizadas (CU03 esc. 5). Anular una Liquidación que ya está `ANULADA` responde `409` con `type` `.../liquidacion-ya-anulada`.
+Con `causa = PARTIDAS_SIN_PRECIO` se agrega `partidasPendientes: [{categoria, concepto, referenciaOrigen}]` (CU03 esc. 4). Los textos de `detail` son los de los escenarios de CU03.
 
 ### Siniestro Total
 
@@ -252,10 +257,9 @@ Aplica también si no hay partidas de costo sincronizadas (CU03 esc. 5). Anular 
 POST /api/v1/liquidaciones
 
 {
-  "idLote": "b2c3d4e5-...",
-  "idGalpon": "e2d3c4b5-...",
-  "precioKgCop": null,
-  "usuario": "jgr@avicontrol.co"
+  "idLote": "b2c3d4e5-e89b-12d3-a456-426614174000",
+  "usuario": "Juan Grau",
+  "huellaDatos": "1c7e..."
 }
 
 HTTP/1.1 201 Created
@@ -263,8 +267,8 @@ Location: /api/v1/liquidaciones/43
 {
   "idLiquidacion": 43,
   "estado": "ACTIVA",
-  "idLote": "b2c3d4e5-...",
-  "idGalpon": "e2d3c4b5-...",
+  "idLote": "b2c3d4e5-e89b-12d3-a456-426614174000",
+  "idGalpon": "e2d3c4b5-e89b-12d3-a456-426614174000",
   "nombreLote": "Lote Sur Ciclo 3",
   "nombreGalpon": "Galpón Sur",
   "siniestroTotal": true,
@@ -283,12 +287,15 @@ Location: /api/v1/liquidaciones/43
   "costosOperativosCop": 32800000,
   "utilidadNetaCop": -32800000,
   "fechaHoraGeneracion": "2026-10-03T11:20:00Z",
-  "usuarioResponsable": "jgr@avicontrol.co",
+  "usuarioResponsable": "Juan Grau",
   "fechaSincronizacionM1": "2026-10-01T08:00:00Z",
   "fechaSincronizacionM2": "2026-10-02T14:30:00Z",
+  "registroAnulacion": null,
   "accionesDisponibles": ["VER_DESGLOSE", "ANULAR"]
 }
 ```
+
+En siniestro total `pollosVendidos = 0` y `pesoTotalKg = 0.00` (valores conocidos: no hubo venta); `precioKgCop`, `pesoPromedioKg` y el resultado de sacrificio son `null` porque no existen.
 
 ### Anulación (Request/Response CU04)
 
@@ -297,7 +304,7 @@ PUT /api/v1/liquidaciones/42/anulacion
 
 {
   "motivo": "Error en el precio por kg ingresado. Se corrige en nueva liquidación.",
-  "usuario": "jgr@avicontrol.co"
+  "usuario": "Juan Grau"
 }
 
 HTTP/1.1 200 OK
@@ -308,10 +315,12 @@ HTTP/1.1 200 OK
     "idAnulacion": 7,
     "motivo": "Error en el precio por kg ingresado. Se corrige en nueva liquidación.",
     "fechaHoraAnulacion": "2026-10-03T12:00:00Z",
-    "usuarioResponsable": "jgr@avicontrol.co"
+    "usuarioResponsable": "Juan Grau"
   }
 }
 ```
+
+Anular una Liquidación ya `ANULADA` responde `409 liquidacion-ya-anulada` con el campo extra `registroAnulacion` (CU04 esc. 4).
 
 ---
 
@@ -321,22 +330,16 @@ HTTP/1.1 200 OK
 ```java
 package co.edu.unimagdalena.avicontrol.domain.port.in;
 
-import co.edu.unimagdalena.avicontrol.domain.port.in.dto.LiquidacionPreviaDto;
-import co.edu.unimagdalena.avicontrol.domain.port.in.dto.LiquidacionDto;
-import co.edu.unimagdalena.avicontrol.domain.port.in.dto.AnulacionDto;
-import java.math.BigDecimal;
-import java.util.UUID;
+import co.edu.unimagdalena.avicontrol.domain.port.in.dto.*;
 
 /** CU03 — Paso 1+2: calcular vista previa sin persistir */
 public interface PreviewLiquidacionUseCase {
-    LiquidacionPreviaDto calcularVistaPrevia(UUID idLote, UUID idGalpon,
-                                              BigDecimal precioKgCop, String usuario);
+    LiquidacionPreviaDto calcularVistaPrevia(GenerarLiquidacionCommand comando);
 }
 
 /** CU03 — Paso 2 confirmado: persistir la Liquidación */
 public interface GenerarLiquidacionUseCase {
-    LiquidacionDto generarLiquidacion(UUID idLote, UUID idGalpon,
-                                      BigDecimal precioKgCop, String usuario);
+    LiquidacionDto generarLiquidacion(GenerarLiquidacionCommand comando);
 }
 
 /** CU03.FR-014 — Consultar Liquidación existente */
@@ -350,80 +353,80 @@ public interface AnularLiquidacionUseCase {
 }
 ```
 
+```java
+package co.edu.unimagdalena.avicontrol.domain.port.in.dto;
+
+/** precioKgCop es null en siniestro total; huellaDatos es null en la vista previa. */
+public record GenerarLiquidacionCommand(UUID idLote, BigDecimal precioKgCop, String usuario, String huellaDatos) {}
+```
+
 ### Servicio de Vista Previa + Generación: `GenerarLiquidacionService.java`
 ```java
 package co.edu.unimagdalena.avicontrol.application.service;
 
-import co.edu.unimagdalena.avicontrol.domain.model.Liquidacion;
-import co.edu.unimagdalena.avicontrol.domain.shared.Rounding;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.math.BigDecimal;
-import java.util.UUID;
-
 @Service
-public class GenerarLiquidacionService
-        implements PreviewLiquidacionUseCase, GenerarLiquidacionUseCase {
+public class GenerarLiquidacionService implements PreviewLiquidacionUseCase, GenerarLiquidacionUseCase {
+
+    // Repositorios de la copia local, LiquidacionRepository, AvisoUtilizacionRepository y Clock inyectados...
 
     @Override
-    public LiquidacionPreviaDto calcularVistaPrevia(UUID idLote, UUID idGalpon,
-                                                     BigDecimal precioKgCop, String usuario) {
-        // Validaciones previas (FR-005, FR-006, FR-007, FR-009) sin persistir nada
-        validarPrecondiciones(idLote, precioKgCop);
-        var calculo = calcular(idLote, precioKgCop);
-        // Retorna DTO con esVistaPrevia=true; NO se llama a liquidacionRepository.guardar()
-        return LiquidacionMapper.toPreviaDto(calculo);
+    @Transactional(readOnly = true)
+    public LiquidacionPreviaDto calcularVistaPrevia(GenerarLiquidacionCommand cmd) {
+        var datos = cargarYValidar(cmd);                 // precondiciones 1 a 7; no persiste nada
+        var calculo = CalculoLiquidacion.de(datos, cmd.precioKgCop());
+        return LiquidacionMapper.toPreviaDto(datos, calculo, datos.huella(cmd.precioKgCop()));
     }
 
     @Override
     @Transactional
-    public LiquidacionDto generarLiquidacion(UUID idLote, UUID idGalpon,
-                                              BigDecimal precioKgCop, String usuario) {
-        // Se re-ejecutan validaciones antes de persistir (FR-015: validaciones en ambos pasos)
-        validarPrecondiciones(idLote, precioKgCop);
-        var calculo = calcular(idLote, precioKgCop);
-
-        var liq = Liquidacion.crearActiva(idLote, idGalpon,
-                calculo.sac(), precioKgCop,
-                calculo.ventaBruta(), calculo.costosOperativos(), calculo.utilidadNeta(),
-                usuario, clock.instant());
-        liquidacionRepository.guardar(liq);
+    public LiquidacionDto generarLiquidacion(GenerarLiquidacionCommand cmd) {
+        var datos = cargarYValidar(cmd);                 // FR-015: las validaciones se repiten al confirmar
+        if (!datos.huella(cmd.precioKgCop()).equals(cmd.huellaDatos())) {
+            throw new VistaPreviaDesactualizadaException(cmd.idLote());   // precondición 8
+        }
+        var calculo = CalculoLiquidacion.de(datos, cmd.precioKgCop());
+        var liq = Liquidacion.crearActiva(datos, calculo, cmd.usuario(), clock.instant());
+        liq = liquidacionRepository.guardar(liq);        // incluye partidas congeladas y snapshot por fuente
+                                                         // violación de uq_lote_activa → 409 en el manejador global
+        datos.resultadoSacrificio().ifPresent(resultado -> {             // FR-010 / CU08.FR-006
+            resultadoSacrificioRepository.marcarUtilizado(resultado.id());
+            avisoRepository.crearPendienteSiNoExiste(resultado.id(), liq.id(), clock.instant());
+        });
         return LiquidacionMapper.toDto(liq);
     }
 
-    private void validarPrecondiciones(UUID idLote, BigDecimal precioKgCop) {
-        // FR-007: no exista otra ACTIVA
-        if (liquidacionRepository.existeActivaPorLote(idLote)) {
-            throw new LiquidacionDuplicadaException(idLote);
+    private DatosLiquidacion cargarYValidar(GenerarLiquidacionCommand cmd) {
+        var lote = loteRepository.buscarPorId(cmd.idLote())
+                .orElseThrow(() -> new LoteNoEncontradoException(cmd.idLote()));
+        boolean siniestro = lote.poblacionActual() == 0;            // FR-005: siniestro = población 0
+        validarPrecio(siniestro, cmd.precioKgCop());                 // FR-011
+        liquidacionRepository.buscarActivaPorLote(lote.id())
+                .ifPresent(activa -> { throw new LiquidacionYaExistenteException(lote.id(), activa.id()); });
+        var alerta = alertaRepository.buscarPorLote(lote.id())
+                .orElseThrow(() -> new LoteNoLiquidableException(CausaNoLiquidable.SIN_ALERTA_VACIADO));
+        var resultado = resultadoSacrificioRepository.buscarPorLote(lote.id());
+        if (resultado.isEmpty() && !siniestro) {
+            throw new LoteNoLiquidableException(CausaNoLiquidable.SIN_RESULTADO_SACRIFICIO);
         }
-        // FR-011: precio > 0 (null solo en siniestro total)
-        if (precioKgCop != null && precioKgCop.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new PrecioInvalidoException();
+        var alimento = partidaAlimentoRepository.buscarPorLote(lote.id());
+        if (alimento.isEmpty()) {
+            throw new LoteNoLiquidableException(CausaNoLiquidable.SIN_PARTIDAS_ALIMENTO);
         }
-    }
-
-    private Calculo calcular(UUID idLote, BigDecimal precioKgCop) {
-        var sac = resultadoSacrificioRepository.buscarPorLote(idLote);
-        var lote = loteRepository.buscarPorId(idLote);
-        boolean esSiniestro = sac == null; // FR-005: siniestro total sin resultado
-
-        long ventaBruta = esSiniestro ? 0L
-            : Rounding.copTotal(sac.getPesoTotalKg().multiply(precioKgCop));
-        long costosOperativos = calcularCostosOperativos(idLote);
-        long utilidadNeta = ventaBruta - costosOperativos;
-        return new Calculo(sac, lote, ventaBruta, costosOperativos, utilidadNeta);
+        var medicamentos = consumoMedicamentoRepository.buscarPorLote(lote.id());
+        var pendientes = PartidasPendientes.de(alimento, medicamentos);            // FR-006
+        if (!pendientes.isEmpty()) {
+            throw new LoteNoLiquidableException(CausaNoLiquidable.PARTIDAS_SIN_PRECIO, pendientes);
+        }
+        return new DatosLiquidacion(lote, alerta, resultado, alimento, medicamentos, siniestro);
     }
 }
 ```
 
+`CalculoLiquidacion` (dominio) aplica FR-001 a FR-004 y las reglas de partidas de la arquitectura general: Venta Bruta = `HALF_UP(pesoTotalKg × precioKgCop)` (0 en siniestro), mortalidad = `poblacionInicial − poblacionActual`, porcentaje con 2 decimales, costos = suma de subtotales, utilidad = venta − costos.
+
 ### Servicio de Anulación: `AnularLiquidacionService.java`
 ```java
 package co.edu.unimagdalena.avicontrol.application.service;
-
-import co.edu.unimagdalena.avicontrol.domain.model.RegistroAnulacion;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AnularLiquidacionService implements AnularLiquidacionUseCase {
@@ -434,19 +437,16 @@ public class AnularLiquidacionService implements AnularLiquidacionUseCase {
         var liq = liquidacionRepository.buscarPorId(idLiquidacion)
             .orElseThrow(() -> new LiquidacionNoEncontradaException(idLiquidacion));
 
-        // FR-002: solo se anula si está ACTIVA
+        // FR-002: solo se anula si está ACTIVA; se devuelve el registro existente (esc. 4)
         if (!liq.estaActiva()) {
-            throw new LiquidacionYaAnuladaException(idLiquidacion);
+            throw new LiquidacionYaAnuladaException(idLiquidacion, anulacionRepository.buscarPorLiquidacion(idLiquidacion));
         }
 
-        // FR-003: motivo obligatorio, mínimo 10 caracteres, máximo 500
-        if (motivo == null || motivo.isBlank() || motivo.length() < 10 || motivo.length() > 500) {
-            throw new MotivoInvalidoException();
-        }
-
-        // FR-006: solo cambia el estado; NO se tocan otros atributos
+        // FR-003: motivo 10–500 caracteres sin contar espacios iniciales/finales (validado también en el Request)
+        // FR-006: solo cambia el estado; la versión (@Version) detecta anulaciones concurrentes → 409
         liq.anular();
-        var registro = RegistroAnulacion.crear(liq.getId(), motivo, clock.instant(), usuario);
+        var registro = RegistroAnulacion.crear(liq.id(), motivo.strip(), clock.instant(), usuario.strip());
+        liquidacionRepository.guardar(liq);
         anulacionRepository.guardar(registro);
 
         return AnulacionMapper.toDto(liq, registro);
@@ -458,40 +458,23 @@ public class AnularLiquidacionService implements AnularLiquidacionUseCase {
 ```java
 package co.edu.unimagdalena.avicontrol.infrastructure.adapter.rest;
 
-import co.edu.unimagdalena.avicontrol.domain.port.in.dto.*;
-import co.edu.unimagdalena.avicontrol.domain.port.in.*;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
-import java.net.URI;
-
 @RestController
 @RequestMapping("/api/v1/liquidaciones")
 public class LiquidacionController {
 
-    private final PreviewLiquidacionUseCase previewUseCase;
-    private final GenerarLiquidacionUseCase generarUseCase;
-    private final ConsultarLiquidacionUseCase consultarUseCase;
-    private final AnularLiquidacionUseCase anularUseCase;
-
-    // Constructor inyección...
+    // Casos de uso inyectados por constructor...
 
     /** CU03 Paso 1+2: generar vista previa sin persistir */
     @PostMapping("/previa")
-    public ResponseEntity<LiquidacionPreviaDto> vistaPrevia(
-            @RequestBody GenerarLiquidacionRequest req) {
-        return ResponseEntity.ok(previewUseCase.calcularVistaPrevia(
-            req.idLote(), req.idGalpon(), req.precioKgCop(), req.usuario()));
+    public ResponseEntity<LiquidacionPreviaDto> vistaPrevia(@Valid @RequestBody VistaPreviaRequest req) {
+        return ResponseEntity.ok(previewUseCase.calcularVistaPrevia(req.toCommand()));
     }
 
     /** CU03 Paso 2 confirmado: persistir la Liquidación */
     @PostMapping
-    public ResponseEntity<LiquidacionDto> generarLiquidacion(
-            @RequestBody GenerarLiquidacionRequest req) {
-        var dto = generarUseCase.generarLiquidacion(
-            req.idLote(), req.idGalpon(), req.precioKgCop(), req.usuario());
-        return ResponseEntity.created(URI.create("/api/v1/liquidaciones/" + dto.idLiquidacion()))
-                .body(dto);
+    public ResponseEntity<LiquidacionDto> generarLiquidacion(@Valid @RequestBody GenerarLiquidacionRequest req) {
+        var dto = generarUseCase.generarLiquidacion(req.toCommand());
+        return ResponseEntity.created(URI.create("/api/v1/liquidaciones/" + dto.idLiquidacion())).body(dto);
     }
 
     /** CU03.FR-014: consultar Liquidación existente (ACTIVA o ANULADA) */
@@ -500,53 +483,53 @@ public class LiquidacionController {
         return ResponseEntity.ok(consultarUseCase.consultarLiquidacion(id));
     }
 
-    /** CU04: anulación (iniciada desde vista de Liquidación ACTIVA) */
+    /** CU04: anulación (iniciada desde la vista de una Liquidación ACTIVA) */
     @PutMapping("/{id}/anulacion")
-    public ResponseEntity<AnulacionDto> anular(
-            @PathVariable Long id,
-            @RequestBody AnulacionRequest req) {
+    public ResponseEntity<AnulacionDto> anular(@PathVariable Long id, @Valid @RequestBody AnulacionRequest req) {
         return ResponseEntity.ok(anularUseCase.anularLiquidacion(id, req.motivo(), req.usuario()));
     }
 }
 ```
 
+`VistaPreviaRequest`, `GenerarLiquidacionRequest` (añade `huellaDatos` obligatorio) y `AnulacionRequest` validan `usuario` con `@NotBlank @Size(min = 3, max = 100)`, `precioKgCop` con `@Positive` y `motivo` con `@NotBlank @Size(min = 10, max = 500)`.
+
 ---
 
 ## Phase 1: Foundational — Esquema SQL de Liquidación y Dominio
 
-- [ ] **T001** Crear migración Flyway `V3__create_liquidacion_tables.sql`.
-- [ ] **T002** Crear modelos de dominio `Liquidacion`, `PartidaCostoLote`, `SnapshotDatosOrigen`, `RegistroAnulacion`.
-- [ ] **T003** Crear entidades JPA y repositorios Spring Data.
-- [ ] **T004** Implementar `Rounding.java` en `domain/shared/`.
+- [ ] **T001** Crear migración Flyway `V3__create_liquidacion_tables.sql` (DDL de la arquitectura general).
+- [ ] **T002** Crear modelos de dominio `Liquidacion`, `PartidaCostoLote`, `SnapshotDatosOrigen`, `RegistroAnulacion`, `CalculoLiquidacion`, enums `EstadoLiquidacion`, `CategoriaCosto`, `CausaNoLiquidable` y excepciones de negocio.
+- [ ] **T003** Crear entidades JPA (con `@Version` en `LiquidacionEntity`), repositorios Spring Data y adaptadores.
+- [ ] **T004** Implementar `Rounding.java` en `domain/shared/` y la traducción de excepciones a `ProblemDetail` en `GlobalExceptionHandler` (incluida la violación de `uq_lote_activa` y `OptimisticLockException`).
 
 ---
 
-## Phase 2: CU03 — Vista Previa (Paso 1+2, sin persistir)
+## Phase 2: CU03 — Cálculo y Vista Previa (sin persistir)
 
-- [ ] **T005** Unit Test `PreviewLiquidacionServiceTest.java`: verificar cálculos de Caso Dorado, Siniestro Total, rechazo de precio ≤ 0, validación de duplicado previo, y que **no se persiste nada**.
-- [ ] **T006** Implementar `PreviewLiquidacionUseCase.java` y lógica en `GenerarLiquidacionService.java`.
-- [ ] **T007** Controller Test e implementación de `POST /api/v1/liquidaciones/previa` (responde 200, no 201).
+- [ ] **T005** Unit Test `CalculoLiquidacionTest.java`: Caso Dorado de CU03 esc. 1 (107.100.000 / 500 aves / 5,56 % / 22.100.000), ejemplo del plan (139.200.000 / 4,00 %), siniestro total, redondeo `HALF_UP`, costo de población como partida única.
+- [ ] **T006** Unit Test `PreviewLiquidacionServiceTest.java`: las 7 precondiciones con su error, siniestro total por población 0, lote sin resultado y con aves vivas → `SIN_RESULTADO_SACRIFICIO`, huella estable para los mismos datos, y que **no se persiste nada**.
+- [ ] **T007** Implementar `PreviewLiquidacionUseCase` y la vista previa en `GenerarLiquidacionService.java`; Controller Test e implementación de `POST /api/v1/liquidaciones/previa` (responde 200, no 201).
 
 ---
 
 ## Phase 3: CU03 — Confirmación (Persistir Liquidación)
 
-- [ ] **T008** Unit Test `GenerarLiquidacionServiceTest.java`: Caso Dorado, Siniestro Total, prevención de duplicados `409 Conflict`, re-ejecución de validaciones en la confirmación.
-- [ ] **T009** Implementar `GenerarLiquidacionUseCase.java` (persistencia real).
-- [ ] **T010** Controller Test e implementación de `POST /api/v1/liquidaciones` (responde 201 Created).
+- [ ] **T008** Unit Test `GenerarLiquidacionServiceTest.java`: Caso Dorado, siniestro total, duplicado `409`, huella distinta `409`, re-ejecución de validaciones, partidas congeladas y snapshot por fuente, resultado marcado `UTILIZADO` y aviso `PENDIENTE` creado una sola vez por resultado (también tras anular y re-liquidar).
+- [ ] **T009** Implementar `GenerarLiquidacionUseCase` (persistencia real, aviso en la misma transacción).
+- [ ] **T010** Integration Test e implementación de `POST /api/v1/liquidaciones` (201 Created, `Location`), incluida la concurrencia de dos confirmaciones simultáneas.
 
 ---
 
 ## Phase 4: CU03.FR-014 — Consultar Liquidación Existente
 
-- [ ] **T011** Unit Test `ConsultarLiquidacionServiceTest.java`: Liquidación `ACTIVA`, `ANULADA`, no encontrada (404).
-- [ ] **T012** Implementar `ConsultarLiquidacionUseCase.java` y `ConsultarLiquidacionService.java`.
-- [ ] **T013** Controller Test e implementación de `GET /api/v1/liquidaciones/{id}` con `accionesDisponibles`.
+- [ ] **T011** Unit Test `ConsultarLiquidacionServiceTest.java`: Liquidación `ACTIVA` (acciones `VER_DESGLOSE` y `ANULAR`), `ANULADA` (con `registroAnulacion` y solo `VER_DESGLOSE`), no encontrada (404); los valores salen congelados, sin recalcular.
+- [ ] **T012** Implementar `ConsultarLiquidacionUseCase` y `ConsultarLiquidacionService.java`.
+- [ ] **T013** Controller Test e implementación de `GET /api/v1/liquidaciones/{id}`.
 
 ---
 
 ## Phase 5: CU04 — Anular Liquidación
 
-- [ ] **T014** Unit Test `AnularLiquidacionServiceTest.java`: anulación exitosa con motivo, rechazo de motivo < 10 caracteres, rechazo de anulación sobre `ANULADA`, transacción atómica (rollback ante fallo).
+- [ ] **T014** Unit Test `AnularLiquidacionServiceTest.java`: anulación exitosa con motivo y usuario, rechazo de motivo < 10 caracteres o solo espacios, rechazo sobre `ANULADA` con el registro existente, atributos distintos del estado sin cambios, transacción atómica (rollback ante fallo).
 - [ ] **T015** Implementar `AnularLiquidacionService.java` y `AnularLiquidacionUseCase.java`.
-- [ ] **T016** Controller Test e implementación de `PUT /api/v1/liquidaciones/{id}/anulacion`.
+- [ ] **T016** Integration Test e implementación de `PUT /api/v1/liquidaciones/{id}/anulacion`, incluida la anulación concurrente (la segunda recibe `409 liquidacion-ya-anulada`) y la reaparición del lote en `GET /api/v1/lotes`.

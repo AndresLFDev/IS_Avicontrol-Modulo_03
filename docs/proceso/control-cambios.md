@@ -18,6 +18,8 @@ Registro interno de las solicitudes de cambio (SC) sobre lo acordado para el Mó
 |---|---|---|---|---|---|---|---|---|---|
 | SC-01 | 2026-10-05 | Equipo M3 | La lista de lotes deja de mostrar los lotes con Liquidación `ACTIVA`; se consultan en el historial | Evitar duplicar en la lista lo que ya muestra el historial | CU01, CU03, CU04, diccionario, planes 002 y 004 · Figma lista de lotes · 0,5 días | Propuesto | | — | |
 | SC-02 | 2026-10-05 | Docente | Definir los contratos REST completos: query params, cuerpos de respuesta y errores | Observación del docente: query params y API REST sin definir | `api` · arquitectura general, planes 002, 003 y 004 · 0,5 días | Propuesto | | — | |
+| SC-03 | 2026-10-23 | Equipo M3 | La integración con M1 y M2 pasa a ser solo por eventos Kafka: M1 y M2 publican, M3 consume; el aviso de utilización se publica en un tópico de M3 | Unificar el modelo de integración, que se contradecía entre la especificación general (consulta) y la arquitectura (Kafka) | `integracion` · especificación general, CU07–CU10, arquitectura general, plan 001 · Depende de que M1 y M2 publiquen (D-08) · 1 día | Propuesto | | — | |
+| SC-04 | 2026-10-23 | Equipo M3 | Sin autenticación: se quitan Spring Security, JWT, roles y los errores 401/403; el usuario responsable se digita en los formularios de generar y anular | La plataforma no tiene login | `api`, `liquidacion` · especificación general, CU03, CU04, arquitectura general, plan 003 · 0,5 días | Propuesto | | — | |
 
 <!--
 Ejemplos de filas:

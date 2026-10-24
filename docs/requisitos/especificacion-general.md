@@ -1,9 +1,9 @@
 # Épica: Liquidación de Lote y Análisis de Rentabilidad (Módulo 3 – AVICONTROL)
 
 **Created**: 2026-08-31  
-**Actualizado**: 2026-09-21  
-**Origen**: Casos de uso – `docs/diagramas/Modulo3_v1.drawio`  
-**Modelo**: 1 especificación = 1 caso de uso (autocontenidas según `spec-template.md`)  
+**Actualizado**: 2026-10-23  
+**Origen**: Casos de uso – [`docs/arquitectura/diagramas/casos-uso.drawio`](../arquitectura/diagramas/casos-uso.drawio)  
+**Modelo**: 1 especificación = 1 caso de uso (autocontenidas según [`docs/plantillas/spec.md`](../plantillas/spec.md))  
 
 Este documento es el **índice del módulo**: coordina las especificaciones atómicas, sus prioridades y dependencias, y fija el **glosario** y las **reglas transversales** que todas las especificaciones deben respetar. Cada especificación dentro de su subcarpeta es 100% autocontenida y autónoma.
 
@@ -25,27 +25,27 @@ Estos términos tienen un único significado en todo el módulo. Ninguna especif
 
 - **Snapshot financiero**: Conjunto congelado de datos de origen (Módulo 1 y Módulo 2) con el que se calculó una Liquidación, incluyendo la fecha y hora de sincronización de cada fuente y el precio por kilogramo ingresado.
 
-- **Copia local sincronizada**: Réplica que M3 mantiene de los datos cuya fuente oficial es Módulo 1 o Módulo 2, actualizada por consulta periódica en segundo plano.
+- **Copia local sincronizada**: Réplica que M3 mantiene de los datos cuya fuente oficial es Módulo 1 o Módulo 2, actualizada a partir de los eventos que esos módulos publican en Kafka.
 
 ### Términos eliminados
 
 - **"Reporte financiero"**: eliminado del módulo. Era sinónimo no declarado de *Liquidación*. Toda referencia se reemplaza por **Liquidación**.
 - **"Generar Matriz de Ventas"** como nombre de caso de uso: eliminado. El caso de uso que consolida el resultado financiero genera una **Liquidación** y se denomina **M3-CU03 – Generar Liquidación del Lote**.
-- **"Matriz de Ventas" como documento de ingreso** (antiguo M3-CU02): eliminado el 2026-09-21. La versión anterior la trataba como un documento intermedio que se registraba antes de liquidar; el documento raíz de AVICONTROL la define como la tabla de resultado que ve el usuario. El precio por kilogramo se ingresa ahora directamente en M3-CU03. Ver `CAMBIOS.md` §7.
+- **"Matriz de Ventas" como documento de ingreso** (antiguo M3-CU02): eliminado el 2026-09-21. La versión anterior la trataba como un documento intermedio que se registraba antes de liquidar; el documento raíz de AVICONTROL la define como la tabla de resultado que ve el usuario. El precio por kilogramo se ingresa ahora directamente en M3-CU03.
 - **"Anular Documento Financiero"** como nombre de caso de uso: reemplazado por **M3-CU04 – Anular Liquidación**, único documento anulable.
 
 ---
 
 ## Modelo de Integración *(normativo)*
 
-**M3 consulta; los módulos de origen no envían información a M3.**
+**Los módulos de origen publican eventos; M3 los consume.**
 
-1. M3 obtiene todos los datos externos mediante **consultas propias** a Módulo 1 y Módulo 2, ejecutadas por un proceso de sincronización en segundo plano con intervalo configurable.
-2. M3 persiste el resultado de esas consultas en su **copia local sincronizada**, junto con la fecha y hora de cada sincronización.
-3. **Ninguna operación funcional de M3 requiere una consulta en vivo.** Si Módulo 1 o Módulo 2 no responden, M3 opera con la última copia local y muestra su antigüedad.
-4. M3 **no escribe** en Módulo 1 ni en Módulo 2, con una única excepción declarada en M3-CU08 (aviso de utilización del resultado final de sacrificio).
+1. M3 obtiene todos los datos externos **consumiendo los eventos** que Módulo 1 y Módulo 2 publican en Apache Kafka. M3 no hace llamadas REST ni consultas directas a otros módulos.
+2. M3 persiste el contenido de esos eventos en su **copia local sincronizada**, junto con la fecha y hora en que procesó cada evento.
+3. **Ninguna operación funcional de M3 requiere comunicación en vivo.** Si Módulo 1 o Módulo 2 dejan de publicar o el broker no está disponible, M3 opera con la última copia local y muestra su antigüedad.
+4. M3 **no escribe** en Módulo 1 ni en Módulo 2. Su única publicación hacia otro módulo es el aviso de utilización del resultado final de sacrificio declarado en M3-CU08, en un tópico propio.
 
-Las especificaciones M3-CU07 a M3-CU10 documentan cada punto de consulta. Ninguna otra especificación del módulo puede definir un acceso externo por su cuenta.
+Las especificaciones M3-CU07 a M3-CU10 documentan cada flujo de eventos. Conservan el nombre "Consultar…" porque así se llaman los casos de uso que Módulo 1 y Módulo 2 exponen hacia M3 en sus diagramas; el mecanismo es la suscripción a eventos. Ninguna otra especificación del módulo puede definir un acceso externo por su cuenta. Los tópicos y el formato de los eventos están en la [arquitectura general](../arquitectura/general.md#integración-con-módulo-1-y-módulo-2-apache-kafka).
 
 ---
 
@@ -59,11 +59,11 @@ Las especificaciones M3-CU07 a M3-CU10 documentan cada punto de consulta. Ningun
 - **RT-06 – (eliminada 2026-09-21)**: Regulaba la independencia de anulación entre Matriz de Ventas y Liquidación. Sin objeto por la misma razón.
 - **RT-07 – Valorización**: M3 recibe de los módulos de origen **hechos físicos valorizados** (cantidad + precio unitario). La multiplicación, la consolidación y el cálculo de la utilidad son responsabilidad exclusiva de M3. Ningún módulo externo entrega cifras en pesos ya consolidadas por lote.
 - **RT-08 – Costos indirectos**: Administración, arrendamientos, nómina general y servicios quedan fuera del alcance del módulo.
-- **RT-09 – Visibilidad de la sincronización**: Toda pantalla del módulo muestra la fecha y hora de la última sincronización exitosa con Módulo 1 y con Módulo 2, y advierte cuando alguno de ellos no responde. La forma visual del indicador es una decisión de diseño; su presencia no.
+- **RT-09 – Visibilidad de la sincronización**: Toda pantalla del módulo muestra la fecha y hora de la última sincronización exitosa con Módulo 1 y con Módulo 2, y advierte cuando no se han recibido eventos de alguno de ellos dentro del umbral configurado o el broker no está disponible. La forma visual del indicador es una decisión de diseño; su presencia no.
 
 ### Supuestos transversales
 
-- **Identidad del usuario**: El módulo asume un **Administrador Financiero ya autenticado**. La autenticación y la gestión de roles son externas a M3 y no forman parte de ninguna especificación de este módulo. El "usuario responsable" que registran M3-CU03 y M3-CU04 es la identidad que ese contexto externo provee.
+- **Identidad del usuario**: La plataforma **no tiene login** ni gestión de usuarios o roles; M3 no autentica ni autoriza. El "usuario responsable" que registran M3-CU03 y M3-CU04 (RT-04) es el **nombre que el Administrador Financiero digita** en el formulario de generación y en el de anulación.
 
 ---
 
@@ -114,7 +114,7 @@ Orden sugerido de implementación: **CU07 a CU10** (sincronización) → **CU01*
 
 El módulo se considera ACEPTADO cuando se cumplen TODOS:
 
-- **CA-G01**: Los 9 casos de uso operan de extremo a extremo; los cinco internos con el rol Administrador Financiero y los cuatro de integración mediante consulta a Módulo 1 y Módulo 2.
+- **CA-G01**: Los 9 casos de uso operan de extremo a extremo; los cinco internos con el rol Administrador Financiero y los cuatro de integración mediante el consumo de los eventos de Módulo 1 y Módulo 2.
 - **CA-G02**: Cada escenario de aceptación de los specs CU01, CU03–CU10 pasa tal cual está escrito.
 - **CA-G03**: Los cálculos de al menos 3 lotes de prueba coinciden 100% con liquidación manual firmada por el stakeholder.
 - **CA-G04**: Es imposible generar una segunda Liquidación `ACTIVA` para el mismo lote.
@@ -132,7 +132,7 @@ El módulo se considera ACEPTADO cuando se cumplen TODOS:
 - **SC-004**: 10 usuarios concurrentes completan consultas dentro de los tiempos definidos en cada spec sin errores.
 - **SC-005**: En el primer ciclo real, el 90% de los lotes vendidos quedan liquidados sin reprocesos manuales.
 - **SC-006**: Cero casos de Liquidaciones modificables tras su emisión; toda corrección pasa por anulación registrada.
-- **SC-007**: El 100% de las operaciones funcionales se completa sin consultas en vivo a Módulo 1 o Módulo 2.
+- **SC-007**: El 100% de las operaciones funcionales se completa sin comunicación en vivo con Módulo 1 o Módulo 2.
 
 ---
 
@@ -144,11 +144,12 @@ Estas decisiones bloquean la implementación y deben resolverse en mesa conjunta
 | :--- | :--- | :--- | :--- |
 | D-01 | Criterio de costeo del alimento: compras, consumo real o requerimiento proyectado | M3-CU03, M3-CU09 | Módulo 2 |
 | D-02 | Exposición formal de población inicial, población actual, costo del lote, estado y alerta de vaciado sanitario | M3-CU07 | Módulo 1 |
-| D-03 | Mecanismo de aviso de utilización del resultado final de sacrificio | M3-CU08 | Módulo 2 |
+| D-03 | Formato y confirmación del aviso de utilización del resultado final de sacrificio (el transporte es Kafka, tópico `avicontrol.m3.avisos-utilizacion`) | M3-CU08 | Módulo 2 |
 | D-04 | Ruta de estado para liquidar un lote con mortalidad total | M3-CU03, M3-CU07 | Módulo 1 |
 | D-05 | Tratamiento del impuesto informado por Módulo 2: ¿los costos operativos se calculan sobre valor neto o con impuesto? | M3-CU03, M3-CU09, M3-CU10 | Módulo 2 |
 | D-06 | Registro de mortalidad ocurrida fuera del estado `Productivo` | M3-CU03, M3-CU07 | Módulo 1 |
 | D-07 | Grafía exacta del catálogo de estados compartido | M3-CU01, M3-CU07 | Módulo 1 |
+| D-08 | Publicación de eventos en Kafka: tópicos, sobre y campos de cada evento (M3 propone el contrato del plan 001) | M3-CU07 a M3-CU10 | Módulo 1 y Módulo 2 |
 
 ---
 
