@@ -1,7 +1,13 @@
-target/
-!.mvn/wrapper/maven-wrapper.jar
-!**/src/main/**/target/
-!**/src/test/**/target/
+### Gradle ###
+.gradle/
+!gradle/wrapper/gradle-wrapper.jar
+
+### Secretos ###
+.env
+!.env.example
+
+### Frontend ###
+node_modules/
 
 ### IntelliJ IDEA ###
 .idea/

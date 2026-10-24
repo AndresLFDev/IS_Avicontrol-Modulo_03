@@ -1,0 +1,17 @@
+# Desarrollo local: PostgreSQL y Kafka de compose.yaml (raíz del repositorio).
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:avicontrol}
+    username: ${DB_USER:avicontrol}
+    password: ${DB_PASSWORD:avicontrol}
+  flyway:
+    # db/seed trae datos de demostración (V1000+). out-of-order permite aplicar una migración
+    # de esquema nueva (V4, V5…) aunque el seed V1000 ya se haya aplicado.
+    locations: classpath:db/migration,classpath:db/seed
+    out-of-order: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+logging:
+  level:
+    co.edu.unimagdalena.avicontrol: DEBUG

@@ -1,0 +1,60 @@
+# Configuración común a todos los perfiles. Los valores de conexión vienen de application-<perfil>.yml.
+spring:
+  application:
+    name: avicontrol-modulo3
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate # el esquema lo crea Flyway, nunca Hibernate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    locations: classpath:db/migration
+  mvc:
+    problemdetails:
+      enabled: true
+  kafka:
+    consumer:
+      group-id: avicontrol-modulo3
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      ack-mode: manual
+    producer:
+      acks: all
+
+server:
+  error:
+    include-stacktrace: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+# Tópicos Kafka (arquitectura general, sección "Integración con Módulo 1 y Módulo 2")
+kafka:
+  topicos:
+    m1-galpones: avicontrol.m1.galpones
+    m1-alertas-vaciado: avicontrol.m1.alertas-vaciado
+    m2-resultados-sacrificio: avicontrol.m2.resultados-sacrificio
+    m2-partidas-alimento: avicontrol.m2.partidas-alimento
+    m2-consumos-medicamento: avicontrol.m2.consumos-medicamento
+    m3-avisos-utilizacion: avicontrol.m3.avisos-utilizacion
+    m3-dlt: avicontrol.m3.dlt
+
+sync:
+  umbral-inactividad: PT24H # RT-09: fuente desactualizada si no hay eventos exitosos en este lapso
+
+avisos:
+  intervalo: PT1M # frecuencia de publicación de avisos de utilización pendientes
