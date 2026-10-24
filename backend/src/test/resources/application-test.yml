@@ -1,0 +1,11 @@
+# Pruebas de integración: PostgreSQL y Kafka los levanta Testcontainers (@ServiceConnection),
+# así que aquí no se configuran URLs de conexión.
+spring:
+  kafka:
+    consumer:
+      auto-offset-reset: earliest
+
+logging:
+  level:
+    co.edu.unimagdalena.avicontrol: DEBUG
+    org.testcontainers: INFO
