@@ -22,7 +22,7 @@ Calcula Venta Bruta, Mortalidad del Lote, Costos Operativos y Utilidad Neta con 
 ## Technical Context
 
 - **Language/Version**: Java 21 (LTS)
-- **Primary Dependencies**: Spring Boot 3.3.x, Spring Data JPA, Spring Web MVC, Jakarta Validation, Flyway (`V3__create_liquidacion_tables.sql`, DDL en la arquitectura general), JUnit 5, MockMvc
+- **Primary Dependencies**: Spring Boot 4.1.x, Spring Data JPA, Spring Web MVC, Jakarta Validation, Flyway (`V3__create_liquidacion_tables.sql`, DDL en la arquitectura general), JUnit 5, MockMvc
 - **Storage**: PostgreSQL (`liquidacion`, `partida_costo_lote`, `snapshot_datos_origen`, `registro_anulacion`, `aviso_utilizacion_resultado`)
 - **Testing**: Unit tests exhaustivos del cálculo financiero y pruebas de integración REST con Testcontainers
 - **Target Platform**: JVM 21 / REST API

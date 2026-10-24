@@ -15,20 +15,20 @@ Este documento define la arquitectura, las tecnologías, el modelo de datos rela
 | Área | Tecnología adoptada | Uso en el proyecto |
 | --- | --- | --- |
 | Lenguaje | Java 21 (LTS) | Dominio, casos de uso, adaptadores y pruebas |
-| Framework principal | Spring Boot 3.3.x | Configuración, ejecución y composición de la aplicación REST |
-| Construcción | Gradle (`build.gradle`, wrapper `gradlew`) | Gestión de dependencias, compilación y empaquetado |
+| Framework principal | Spring Boot 4.1.x (Spring Framework 7) | Configuración, ejecución y composición de la aplicación REST |
+| Construcción | Gradle 9 (`build.gradle`, wrapper `gradlew`) | Gestión de dependencias, compilación y empaquetado |
 | API HTTP | Spring Web MVC | Controladores REST síncronos |
 | Validación | Jakarta Bean Validation | Validación de DTOs en adaptadores de entrada |
 | Seguridad | — (sin autenticación) | La plataforma no tiene login. El usuario responsable se digita en el formulario (ver [Identidad del usuario](#identidad-del-usuario)) |
 | Persistencia | Spring Data JPA + Hibernate | Repositorios y entidades JPA |
 | Base de datos | PostgreSQL 16 en todos los perfiles | Copia local sincronizada y liquidaciones. No se usa H2: no soporta el índice único parcial `uq_lote_activa` |
 | Migraciones | Flyway (`flyway-core`, `flyway-database-postgresql`) | Versionamiento y aplicación ordenada del esquema SQL |
-| Mensajería inter-módulos | Apache Kafka + Spring Kafka | **Único** mecanismo de integración con Módulo 1 y Módulo 2 (eventos entrantes) y aviso de utilización hacia Módulo 2 (evento saliente) |
+| Mensajería inter-módulos | Apache Kafka + Spring Kafka 4 | **Único** mecanismo de integración con Módulo 1 y Módulo 2 (eventos entrantes) y aviso de utilización hacia Módulo 2 (evento saliente) |
 | Exportación de reportes | Apache POI `poi-ooxml:5.2.5` | Generación de reportes Excel (CU05) |
-| Serialización | Jackson | JSON para API REST y eventos Kafka |
-| Documentación API | OpenAPI 3 (`springdoc-openapi`) | Descripción interactiva de endpoints en `/swagger-ui.html` |
+| Serialización | Jackson 3 (paquete `tools.jackson`) | JSON para API REST y eventos Kafka |
+| Documentación API | OpenAPI 3 (`springdoc-openapi` 3.x) | Descripción interactiva de endpoints en `/swagger-ui.html` |
 | Pruebas unitarias | JUnit 5 y Mockito | Reglas de dominio y casos de uso aislados |
-| Pruebas de integración | Spring Boot Test + Testcontainers | PostgreSQL y Kafka reales durante las pruebas |
+| Pruebas de integración | Spring Boot Test + Testcontainers 2 | PostgreSQL y Kafka reales durante las pruebas |
 | Utilidades | Lombok | Reducción de código repetitivo (solo en `infrastructure`) |
 | Calidad y arquitectura | Spotless y ArchUnit | Formato uniforme y verificación de límites entre capas |
 | Observabilidad | Spring Boot Actuator y Micrometer | Salud (`/actuator/health`, incluye la conexión al broker) y métricas operativas |

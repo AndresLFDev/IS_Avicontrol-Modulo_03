@@ -21,7 +21,7 @@ Incluye filtrado por etapa (una etapa o "Todos"), búsqueda por nombre de lote, 
 ## Technical Context
 
 - **Language/Version**: Java 21 (LTS)
-- **Primary Dependencies**: Spring Boot 3.3.x, Spring Data JPA, Spring Web MVC, Jakarta Validation, JUnit 5, MockMvc
+- **Primary Dependencies**: Spring Boot 4.1.x, Spring Data JPA, Spring Web MVC, Jakarta Validation, JUnit 5, MockMvc
 - **Storage**: Consulta sobre la copia local (`galpon`, `lote`, `alerta_vaciado_sanitario`, `resultado_final_sacrificio`) y sobre `liquidacion`
 - **Testing**: Unit tests con Mockito y pruebas de integración REST con MockMvc + Testcontainers (PostgreSQL)
 - **Target Platform**: JVM 21 / REST API

@@ -15,7 +15,7 @@ Lista de tareas pendientes y acuerdos del equipo para las siguientes fases.
 
 ## Construcción del Backend
 
-- [ ] Crear `backend/build.gradle` y `settings.gradle` con Spring Boot 3.3.x, Spring Kafka, Flyway, PostgreSQL, Apache POI, springdoc, Testcontainers y ArchUnit.
+- [ ] Crear `backend/build.gradle` y `settings.gradle` con Spring Boot 4.1.x, Spring Kafka, Flyway, PostgreSQL, Apache POI, springdoc, Testcontainers y ArchUnit.
 - [ ] Crear `compose.yaml` con PostgreSQL y Kafka para desarrollo local.
 - [ ] Crear las migraciones Flyway en `backend/src/main/resources/db/migration/` (`V1__create_sync_tables.sql`, `V2__create_partidas_tables.sql`, `V3__create_liquidacion_tables.sql`) y los datos de demostración en `db/seed/`.
 - [ ] Implementar la suite de pruebas unitarias (JUnit 5 / Mockito), de integración (Testcontainers) y de arquitectura (ArchUnit).

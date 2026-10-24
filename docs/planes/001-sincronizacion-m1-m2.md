@@ -18,7 +18,7 @@ M3 no hace llamadas REST a M1 ni a M2. Los tópicos, reglas de consumo, reintent
 ## Technical Context
 
 - **Language/Version**: Java 21 (LTS)
-- **Primary Dependencies**: Spring Boot 3.3.x, Spring Kafka, Spring Data JPA, Jakarta Validation, `@Scheduled` (solo para publicar avisos pendientes)
+- **Primary Dependencies**: Spring Boot 4.1.x, Spring Kafka, Spring Data JPA, Jakarta Validation, `@Scheduled` (solo para publicar avisos pendientes)
 - **Storage**: PostgreSQL, migraciones Flyway `V1__create_sync_tables.sql` y `V2__create_partidas_tables.sql` (DDL en la arquitectura general)
 - **Testing**: JUnit 5 y Mockito (servicios), Spring Boot Test + Testcontainers con PostgreSQL y Kafka (consumidores y productor)
 - **Target Platform**: JVM 21 / Docker

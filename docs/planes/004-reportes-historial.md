@@ -18,7 +18,7 @@ Este plan aborda la **consulta histórica cronológica** de liquidaciones (`CU06
 ## Technical Context
 
 - **Language/Version**: Java 21 (LTS)
-- **Primary Dependencies**: Spring Boot 3.3.x, Spring Data JPA, Spring Web MVC, Apache POI `poi-ooxml:5.2.5`, JUnit 5, MockMvc
+- **Primary Dependencies**: Spring Boot 4.1.x, Spring Data JPA, Spring Web MVC, Apache POI `poi-ooxml:5.2.5`, JUnit 5, MockMvc
 - **Storage**: Proyección y lectura sobre tablas `liquidacion`, `partida_costo_lote`, `registro_anulacion`, `lote`, `galpon`
 - **Testing**: Unit tests de lógica de proyección/agrupación, tests de generación de Excel con Apache POI y tests REST
 - **Performance Goals**: Generación y descarga de archivo Excel < 10s (CU05.SC-002); consulta de historial < 3s (CU06.SC-001)
