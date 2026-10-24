@@ -1,7 +1,7 @@
 # Feature Specification: M3-CU04 – Anular Liquidación
 
 **Created**: 2026-09-18  
-**Actualizado**: 2026-10-05  
+**Actualizado**: 2026-10-23  
 **Módulo**: 3 – Liquidación de Lote y Análisis de Rentabilidad (AVICONTROL)  
 **Rol Principal**: Administrador Financiero  
 
@@ -50,7 +50,7 @@ Como administrador financiero, quiero anular formalmente una Liquidación emitid
 
 - **Conservación total de la Liquidación anulada**: La anulación **nunca** edita ni elimina valores de la Liquidación original. Una Liquidación `ANULADA` conserva todos sus campos tal como fueron emitidos, incluido el snapshot financiero y el precio por kg ingresado. El estado es el único atributo que cambia.
 - **Anulaciones sucesivas sobre el mismo lote**: Un lote puede acumular varias Liquidaciones en estado `ANULADA`, pero como máximo una en estado `ACTIVA`. Todas permanecen consultables en el historial (M3-CU06).
-- **Resultado final de sacrificio ya avisado como utilizado**: Anular la Liquidación no retira el aviso de utilización enviado a Módulo 2 (M3-CU08). El resultado permanece marcado como utilizado; la nueva Liquidación reutiliza el mismo resultado sincronizado.
+- **Resultado final de sacrificio ya avisado como utilizado**: Anular la Liquidación no retira el aviso de utilización enviado a Módulo 2 (M3-CU08). El resultado permanece marcado como utilizado y es definitivo: Módulo 2 no puede corregirlo y M3 rechaza cualquier corrección (M3-CU08.FR-004). La nueva Liquidación reutiliza el mismo resultado sincronizado, así que la anulación sirve para corregir el precio por kg y para recoger los costos que M1 o M2 hayan actualizado, pero no la cantidad final ni el peso.
 - **Anulación con módulos de origen indisponibles**: La anulación opera exclusivamente sobre Liquidaciones almacenadas en M3 y no requiere consulta alguna a Módulo 1 o Módulo 2. La indisponibilidad de los módulos de origen no la bloquea.
 - **Concurrencia**: Si dos usuarios intentan anular la misma Liquidación simultáneamente, solo la primera operación se aplica; la segunda recibe el mensaje de Liquidación ya anulada.
 - **Efecto sobre las vistas derivadas**: El Desglose (M3-CU05) y el Historial (M3-CU06) reflejan el nuevo estado de inmediato, sin requerir acción adicional, por tratarse de proyecciones de solo lectura.
@@ -64,7 +64,7 @@ Como administrador financiero, quiero anular formalmente una Liquidación emitid
 - **FR-001**: El sistema MUST proveer un flujo de anulación aplicable a la **Liquidación**, único Documento Financiero definido en el glosario del módulo.
 - **FR-002**: El sistema MUST permitir anular únicamente Liquidaciones que se encuentren en estado `ACTIVA`, y MUST rechazar la anulación de Liquidaciones en estado `ANULADA`.
 - **FR-002b**: La anulación se inicia únicamente desde la **vista de una Liquidación `ACTIVA`** definida en M3-CU03.FR-014, a la que se llega desde el historial (M3-CU06) o desde el aviso de Liquidación existente (M3-CU03 escenario 8). El Desglose (M3-CU05) y el Historial (M3-CU06) solo **consultan** el registro de anulación; no la inician. Corresponde al `«extend»` de *Anular Liquidación* sobre *Generar Liquidación* en el diagrama de casos de uso.
-- **FR-003**: El sistema MUST exigir un motivo de anulación no vacío (mínimo 10 caracteres, máximo 500) antes de permitir la confirmación.
+- **FR-003**: El sistema MUST exigir un motivo de anulación no vacío (mínimo 10 caracteres, máximo 500) y el nombre del usuario responsable (texto obligatorio; la plataforma no tiene login) antes de permitir la confirmación.
 - **FR-004**: El sistema MUST mostrar una pantalla de confirmación explícita antes de persistir la anulación, indicando el lote afectado y las consecuencias de la acción. Si el usuario cancela, el sistema NO DEBE realizar cambio alguno.
 - **FR-005**: Al confirmarse la anulación, el sistema MUST cambiar el estado de la Liquidación a `ANULADA` y MUST crear un registro de auditoría con motivo, fecha, hora y usuario responsable.
 - **FR-006**: El sistema MUST conservar íntegros todos los valores de la Liquidación anulada. La anulación NO DEBE editar, recalcular ni eliminar ningún atributo distinto del estado.

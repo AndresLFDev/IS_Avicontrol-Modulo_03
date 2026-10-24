@@ -1,7 +1,7 @@
 # Feature Specification: M3-CU01 – Consultar Lista de Lotes
 
 **Created**: 2026-08-31  
-**Actualizado**: 2026-10-05  
+**Actualizado**: 2026-10-23  
 **Módulo**: 3 – Liquidación de Lote y Análisis de Rentabilidad (AVICONTROL)  
 **Rol Principal**: Administrador Financiero  
 
@@ -44,10 +44,10 @@ Como administrador financiero, quiero consultar la lista consolidada de lotes qu
    - **When** el administrador accede a la lista
    - **Then** el sistema presenta un estado vacío con el mensaje "No hay lotes disponibles para consultar" y bloquea cualquier intento de generar una Liquidación
 
-6. **Scenario**: Indisponibilidad temporal de Módulo 1 durante la sincronización
-   - **Given** existe una copia local sincronizada previa y Módulo 1 no responde cuando M3 ejecuta una consulta periódica
+6. **Scenario**: Indisponibilidad temporal de Módulo 1 o del broker
+   - **Given** existe una copia local sincronizada previa y no llegan eventos de Módulo 1 o el broker no está disponible
    - **When** el administrador consulta la lista de lotes
-   - **Then** el sistema muestra la última copia local disponible, identifica su fecha y hora de actualización y reintenta la consulta en segundo plano sin interrumpir la vista ni los demás módulos
+   - **Then** el sistema muestra la última copia local disponible, identifica su fecha y hora de actualización, advierte que la copia puede estar desactualizada (RT-09) y reanuda el consumo de eventos en segundo plano sin interrumpir la vista ni los demás módulos
 
 7. **Scenario**: Filtrado por etapa sin coincidencias
    - **Given** se visualiza la lista de lotes y el usuario selecciona una etapa (`Productivo`, `En Cosecha`, `Aislamiento`, `Por Liquidar`)
@@ -104,6 +104,8 @@ Como administrador financiero, quiero consultar la lista consolidada de lotes qu
   - `Mantenimiento`: galpón en reparaciones estructurales, sin lote.
   - `Aislamiento`: galpón o lote con restricción sanitaria.
   
+  M3 los almacena con los códigos `DISPONIBLE`, `VACIADO_SANITARIO`, `PRODUCTIVO`, `EN_COSECHA`, `MANTENIMIENTO` y `AISLAMIENTO` (ver diccionario).
+
   [NEEDS CLARIFICATION – D-07: la grafía exacta de cada estado debe acordarse con Módulo 1, que actualmente los escribe en minúscula ("En cosecha", "Vaciado sanitario").]
 - **FR-004**: Para un lote en etapa `Por Liquidar`, el sistema MUST identificar el lote mediante los UUID históricos de la alerta de vaciado sanitario y MUST ofrecer, **en la propia fila del lote y sin pantalla de detalle intermedia**, la acción de generar la Liquidación (M3-CU03) si existe resultado final de sacrificio sincronizado o si la población actual sincronizada es 0. La lista NO ofrece acceso a Liquidaciones existentes, al Desglose ni a la anulación: se alcanzan desde el historial (M3-CU06) y la vista de la Liquidación (M3-CU03.FR-014).
 - **FR-005**: Cada fila MUST mostrar **una única acción**, determinada por la etapa del lote (FR-013), y NO DEBE ocultarla cuando no aplique:

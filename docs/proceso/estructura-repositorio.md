@@ -25,7 +25,7 @@ Este documento define dónde va cada archivo, cómo se agrupan las carpetas y c�
 2. **Una carpeta contiene archivos del mismo nivel o carpetas del mismo tipo, no ambas mezcladas.** Por ejemplo, `docs/features/` solo contiene carpetas de casos de uso; lo que es de todo el módulo va en otra carpeta.
 3. **Cada documento existe en un solo lugar.** No hay copias del mismo archivo en dos rutas.
 4. **Sin anidamiento redundante.** El repositorio es solo del Módulo 03, así que no hay carpetas `modulo3/` dentro.
-5. **La carpeta coincide con el alcance de commit.** Un `feat(liquidacion)` toca el paquete `liquidacion` del backend y la carpeta `features/liquidacion/` del frontend; un `docs(diseno)` toca `docs/arquitectura/`.
+5. **El alcance de commit indica el área funcional.** Un `feat(liquidacion)` toca clases de liquidación del backend (ver [sección 5](#áreas-funcionales-y-alcances-de-commit)) y la carpeta `features/liquidacion/` del frontend; un `docs(diseno)` toca `docs/arquitectura/`.
 6. **Backend y frontend en el mismo repositorio, cada uno en su carpeta.** Un solo Git Flow, una sola versión, y una funcionalidad completa (endpoint + pantalla) cabe en un solo PR. Ninguno importa archivos del otro: se comunican solo por la API REST.
 
 ---
@@ -47,14 +47,15 @@ IS_Avicontrol-Modulo_03/
 │   ├── src/
 │   │   ├── main/
 │   │   │   ├── java/co/edu/unimagdalena/avicontrol/
-│   │   │   │   ├── domain/         reglas de negocio puras
-│   │   │   │   ├── service/        casos de uso
-│   │   │   │   └── infrastructure/ Spring, REST, JPA, Kafka, clientes M1/M2
+│   │   │   │   ├── domain/         reglas de negocio puras y puertos
+│   │   │   │   ├── application/    servicios de casos de uso
+│   │   │   │   └── infrastructure/ Spring, REST, JPA, Kafka, POI
 │   │   │   └── resources/          configuración y migraciones
 │   │   └── test/                   espejo de main
 │   ├── .env.example
-│   ├── mvnw  mvnw.cmd  .mvn/
-│   └── pom.xml
+│   ├── gradlew  gradlew.bat  gradle/
+│   ├── settings.gradle
+│   └── build.gradle
 ├── frontend/                   interfaz (React + TypeScript + Vite)
 │   ├── public/
 │   ├── src/
@@ -88,9 +89,9 @@ En la raíz solo van archivos que aplican a **todo el repositorio** o que GitHub
 | `.gitignore`, `.gitattributes`, `.editorconfig` | Configuración de Git y del editor para ambos proyectos |
 | `.github/pull_request_template.md` | Plantilla de PR |
 | `.github/ISSUE_TEMPLATE/` | Plantillas de issues |
-| `.github/workflows/ci.yml` | Integración continua: `mvn verify` en `backend/` y `npm run lint`, `npm test`, `npm run build` en `frontend/` |
+| `.github/workflows/ci.yml` | Integración continua: `./gradlew check integrationTest` en `backend/` y `npm run lint`, `npm test`, `npm run build` en `frontend/` |
 
-❌ No van en la raíz: `pom.xml`, `package.json`, `node_modules/`, otros documentos `.md`, diagramas, scripts sueltos, archivos de prueba, exportaciones.
+❌ No van en la raíz: `build.gradle`, `package.json`, `node_modules/`, otros documentos `.md`, diagramas, scripts sueltos, archivos de prueba, exportaciones.
 
 ---
 
@@ -111,7 +112,7 @@ docs/
 │   └── ...
 ├── planes/                               cómo se construye (uno o más CU por plan)
 │   ├── 001-sincronizacion-m1-m2.md       CU07–CU10
-│   ├── 002-consulta-galpones.md          CU01
+│   ├── 002-consulta-lotes.md             CU01
 │   ├── 003-gestion-liquidaciones.md      CU03–CU04
 │   └── 004-reportes-historial.md         CU05–CU06
 ├── arquitectura/
@@ -167,39 +168,33 @@ Reglas:
 
 Paquete raíz: `co.edu.unimagdalena.avicontrol`.
 
-La organización es **primero por capa y dentro de cada capa por área funcional**. Las capas son las de [`general.md`](../arquitectura/general.md) y las áreas coinciden con los alcances de commit de [`CONTRIBUTING.md`](../../CONTRIBUTING.md#alcances).
+La organización es **por capa y, dentro de cada capa, por tipo de pieza** (modelo, puerto, servicio, adaptador), exactamente como la define [`general.md`](../arquitectura/general.md#arquitectura-limpia-por-capas), que es la referencia oficial del árbol completo. No hay subpaquetes por área funcional: el área de una clase se reconoce por su nombre (`GenerarLiquidacionService`, `SyncModulo2Service`).
 
 ```
 co/edu/unimagdalena/avicontrol/
 ├── AvicontrolApplication.java
 │
 ├── domain/                               Java puro: sin Spring, JPA, Jackson ni Kafka
-│   ├── costos/                           PartidaCosto, TipoCosto
-│   ├── venta/                            Venta
-│   ├── liquidacion/                      Liquidacion, EstadoLiquidacion, LiquidacionRepository,
-│   │                                     LiquidacionYaAnuladaException
-│   ├── integracion/                      Galpon, Lote, ResultadoSacrificio, Modulo1Port, Modulo2Port
-│   └── shared/                           Redondeo, Dinero
+│   ├── model/                            Liquidacion, Lote, Galpon, EtapaLote, CategoriaCosto…
+│   ├── exception/                        LoteNoLiquidableException, LiquidacionYaAnuladaException…
+│   ├── port/
+│   │   ├── in/                           *UseCase (casos de uso)
+│   │   │   └── dto/                      records de entrada/salida de los casos de uso
+│   │   │       └── evento/               datos de eventos entrantes ya validados
+│   │   └── out/                          *Repository, *Publisher, *Port
+│   └── shared/                           Rounding, Pagina
 │
-├── service/                              casos de uso y límite transaccional
-│   ├── costos/
-│   ├── venta/
-│   ├── liquidacion/                      GenerarLiquidacionService, AnularLiquidacionService
-│   ├── reportes/                         DesgloseService, HistorialLiquidacionesService
-│   └── integracion/                      SincronizacionService
+├── application/
+│   └── service/                          *Service que implementan los *UseCase, @Transactional
+│       └── sync/                         procesamiento de eventos de M1/M2 y aviso a M2
 │
 └── infrastructure/
     ├── adapter/
-    │   ├── rest/                         entrada HTTP, por área
-    │   │   └── liquidacion/              LiquidacionController, *Request, *Response
-    │   ├── persistence/                  base de datos, por área
-    │   │   └── liquidacion/              LiquidacionEntity, LiquidacionJpaRepository,
-    │   │                                 LiquidacionPersistenceAdapter, LiquidacionEntityMapper
-    │   ├── client/                       otros módulos, por módulo de origen
-    │   │   ├── m1/                       Modulo1Client
-    │   │   └── m2/                       Modulo2Client, ResultadoSacrificioConsumer
-    │   └── export/                       ExcelExporter (Apache POI)
-    ├── config/                           SecurityConfig, OpenApiConfig, KafkaConfig, ClockConfig
+    │   ├── rest/                         *Controller, *Request, *Response
+    │   ├── messaging/                    *Consumer y *Producer de Kafka, sobres JSON
+    │   ├── persistence/                  *Entity, *JpaRepository, *PersistenceAdapter, *EntityMapper
+    │   └── export/                       ExcelWorkbookBuilder (Apache POI)
+    ├── config/                           KafkaConfig, OpenApiConfig, ClockConfig, SchedulingConfig
     └── exception/                        GlobalExceptionHandler
 ```
 
@@ -207,24 +202,23 @@ co/edu/unimagdalena/avicontrol/
 
 | Capa | Puede contener | No puede contener | Puede depender de |
 |---|---|---|---|
-| `domain` | Entidades, enums, value objects, fórmulas, excepciones de negocio, interfaces de repositorio y de puertos | Anotaciones de Spring, `@Entity`, `@JsonProperty`, DTOs, clases de otras capas | Nada |
-| `service` | Servicios de casos de uso, comandos y vistas de solo lectura, `@Transactional` | Controladores, entidades JPA, clientes HTTP o Kafka | `domain` |
-| `infrastructure` | Controladores, DTOs, entidades JPA, mappers, clientes, configuración | Reglas de negocio o fórmulas | `service`, `domain` |
+| `domain` | Entidades, enums, value objects, fórmulas, excepciones de negocio, interfaces de casos de uso (`port/in`) con sus DTOs (`port/in/dto`) e interfaces de repositorios y publicadores (`port/out`) | Anotaciones de Spring, `@Entity`, `@JsonProperty`, tipos de Spring Data (`Page`), `*Request`/`*Response` HTTP, clases de otras capas | Nada |
+| `application` | Servicios que implementan los casos de uso, `@Service`, `@Transactional`, `@Scheduled` | Controladores, entidades JPA, clientes Kafka, Apache POI | `domain` |
+| `infrastructure` | Controladores, `Request`/`Response`, entidades JPA, mappers, consumidores y productores Kafka, POI, configuración | Reglas de negocio o fórmulas | `application`, `domain` |
 
 La regla de dependencias la verifica ArchUnit en `ArchitectureTest` (ver [sección 7](#7-backend-pruebas-backendsrctest)). Un PR que la rompa no pasa la CI.
 
-### Áreas funcionales
+### Áreas funcionales y alcances de commit
 
-| Área (paquete) | Alcance de commit | Contenido | ¿Tiene paquete en `domain`? |
-|---|---|---|---|
-| `costos` | `costos` | Alimento, insumos médicos, población inicial | Sí |
-| `venta` | `venta` | Venta bruta | Sí |
-| `liquidacion` | `liquidacion` | Generar, anular, mortalidad, utilidad neta | Sí |
-| `reportes` | `reportes` | Desglose, historial, exportación | **No**: los reportes son vistas de `Liquidacion`, no entidades nuevas |
-| `integracion` | `integracion` | Copia local de datos de M1 y M2, sincronización | Sí |
-| `shared` | sin alcance | Redondeo y value objects comunes | Solo en `domain` |
+Las áreas no son paquetes, pero sí deciden el alcance del commit (ver [`CONTRIBUTING.md`](../../CONTRIBUTING.md#alcances)):
 
-En `infrastructure/adapter/rest/` y `persistence/` las carpetas de área se crean con la primera clase de esa área; no todas las áreas tendrán controlador o tabla propia.
+| Alcance | Clases típicas |
+|---|---|
+| `costos` | `PartidaCostoLote`, `CategoriaCosto`, cálculo de costos operativos |
+| `venta` | Venta bruta dentro de `CalculoLiquidacion` |
+| `liquidacion` | `Liquidacion`, `GenerarLiquidacionService`, `AnularLiquidacionService`, `ListarLotesService`, `LiquidacionController`, `LoteController` |
+| `reportes` | `ConsultarHistorialService`, `ConsultarDesgloseService`, `ExportarExcelService`, `ExcelWorkbookBuilder` |
+| `integracion` | `application/service/sync/`, `adapter/messaging/`, `SincronizacionController` (estado RT-09), copia local de M1 y M2 |
 
 ---
 
@@ -232,17 +226,20 @@ En `infrastructure/adapter/rest/` y `persistence/` las carpetas de área se crea
 
 ```
 resources/
-├── application.yml                       configuración común
-├── application-dev.yml                   H2 o PostgreSQL local
+├── application.yml                       configuración común (tópicos Kafka, umbrales)
+├── application-dev.yml                   PostgreSQL y Kafka de compose.yaml; activa db/seed
 ├── application-test.yml
 ├── application-prod.yml                  solo referencias a variables de entorno
 └── db/
     ├── migration/                        esquema (Flyway, todos los perfiles)
-    │   ├── V1__crear_tabla_liquidacion.sql
-    │   └── V2__agregar_estado_liquidacion.sql
+    │   ├── V1__create_sync_tables.sql
+    │   ├── V2__create_partidas_tables.sql
+    │   └── V3__create_liquidacion_tables.sql
     └── seed/                             datos de demostración (solo perfil dev)
         └── V1000__datos_demo_galpones.sql
 ```
+
+El contenido de cada migración está en [`general.md`](../arquitectura/general.md#b-scripts-sql-ddl-completos-flyway-migrations). Todos los perfiles usan PostgreSQL; no se usa H2.
 
 ---
 
@@ -254,24 +251,26 @@ resources/
 backend/src/test/
 ├── java/co/edu/unimagdalena/avicontrol/
 │   ├── ArchitectureTest.java             reglas de capas (ArchUnit)
-│   ├── domain/liquidacion/
-│   │   └── LiquidacionTest.java          unitaria
-│   ├── service/liquidacion/
+│   ├── domain/model/
+│   │   └── CalculoLiquidacionTest.java   unitaria
+│   ├── application/service/
 │   │   └── CU03GenerarLiquidacionTest.java   escenarios de aceptación del spec
-│   └── infrastructure/adapter/rest/liquidacion/
+│   └── infrastructure/adapter/rest/
 │       └── LiquidacionControllerIT.java  integración (Testcontainers)
 └── resources/
     ├── application-test.yml
     └── fixtures/
-        ├── m1/galpones-activos.json       respuestas simuladas de M1
-        └── m2/resultado-sacrificio.json   respuestas y eventos simulados de M2
+        ├── m1/galpon-actualizado.json     eventos simulados de M1
+        └── m2/resultado-sacrificio.json   eventos simulados de M2
 ```
 
 | Tipo de prueba | Sufijo | Se ejecuta con |
 |---|---|---|
-| Unitaria (dominio o servicio con Mockito) | `Test` | `mvn test` |
-| Aceptación de un caso de uso | `CU<nn><Nombre>Test` | `mvn test` |
-| Integración (Spring Boot Test + Testcontainers) | `IT` | `mvn verify` |
+| Unitaria (dominio o servicio con Mockito) | `Test` | `./gradlew test` |
+| Aceptación de un caso de uso | `CU<nn><Nombre>Test` | `./gradlew test` |
+| Integración (Spring Boot Test + Testcontainers con PostgreSQL y Kafka) | `IT` | `./gradlew integrationTest` |
+
+`./gradlew check` ejecuta todo lo anterior más Spotless y ArchUnit.
 
 ---
 
@@ -287,25 +286,26 @@ frontend/
 │   ├── app/
 │   │   ├── App.tsx
 │   │   ├── router.tsx                    todas las rutas en un solo lugar
-│   │   └── Layout.tsx                    menú, encabezado, indicador de sincronización
+│   │   └── Layout.tsx                    menú, encabezado, indicador de sincronización (RT-09)
 │   ├── features/
-│   │   ├── galpones/                     P1 Lista de galpones (CU01)
-│   │   │   ├── GalponesPage.tsx
-│   │   │   ├── GalponesTable.tsx
-│   │   │   ├── galponesApi.ts
-│   │   │   ├── useGalpones.ts
+│   │   ├── lotes/                        P1 Lista de lotes (CU01)
+│   │   │   ├── ListaLotesPage.tsx
+│   │   │   ├── LotesTable.tsx
+│   │   │   ├── lotesApi.ts
+│   │   │   ├── useLotes.ts
 │   │   │   ├── types.ts
-│   │   │   └── GalponesTable.test.tsx
+│   │   │   └── LotesTable.test.tsx
 │   │   ├── liquidacion/                  P2 Generar liquidación, P3 Anular (CU03, CU04)
 │   │   │   ├── GenerarLiquidacionPage.tsx
 │   │   │   ├── MatrizVentaFinal.tsx
+│   │   │   ├── VerLiquidacionPage.tsx
 │   │   │   ├── AnularLiquidacionDialog.tsx
 │   │   │   ├── liquidacionApi.ts
 │   │   │   └── types.ts
 │   │   └── reportes/                     P4 Desglose, P5 Historial (CU05, CU06)
 │   ├── shared/
 │   │   ├── api/
-│   │   │   └── httpClient.ts             URL base, token JWT, manejo de errores
+│   │   │   └── httpClient.ts             URL base y manejo de errores (ProblemDetail)
 │   │   ├── components/                   Button, DataTable, ConfirmDialog
 │   │   ├── hooks/
 │   │   └── format/                       formatCop.ts, formatFecha.ts
@@ -329,7 +329,7 @@ frontend/
 
 ### Reglas del frontend
 
-1. **Una feature por área funcional**, igual que en el backend. `galpones` es la única que no coincide con un alcance de commit: corresponde a CU01, que en el backend vive en `integracion`, pero en pantalla el usuario ve galpones.
+1. **Una feature por área funcional**, igual que los alcances de commit. `lotes` es la única que no coincide con un alcance: corresponde a CU01, cuyo commit usa `liquidacion` porque la lista de lotes es la entrada al flujo de liquidación.
 2. **Las features no se importan entre sí.** Si dos features necesitan lo mismo, se mueve a `shared/`.
 3. **Las llamadas HTTP solo van en archivos `<area>Api.ts`**, que usan `shared/api/httpClient.ts`. Los componentes nunca llaman a `fetch` directamente.
 4. **Sin cálculos de negocio en el frontend.** Venta bruta, mortalidad, costos y utilidad los calcula el backend; el frontend solo los muestra y les da formato.
@@ -345,7 +345,7 @@ frontend/
 |---|---|---|
 | Configuración común del backend | `backend/src/main/resources/application.yml` | Sí |
 | Configuración por entorno del backend | `backend/src/main/resources/application-<perfil>.yml` | Sí, sin secretos |
-| Secretos (contraseñas, clave JWT) | Variables de entorno; en local, `backend/.env` | **No** (`.env` está en `.gitignore`) |
+| Secretos (contraseña de la base de datos, credenciales del broker) | Variables de entorno; en local, `backend/.env` | **No** (`.env` está en `.gitignore`) |
 | URL de la API para el frontend | `frontend/.env` (`VITE_API_URL`) | **No**; se sube `frontend/.env.example` |
 | Lista de variables requeridas | `backend/.env.example`, `frontend/.env.example` | Sí, con valores de ejemplo |
 | Esquema de base de datos | `backend/src/main/resources/db/migration/` | Sí |
@@ -354,7 +354,7 @@ frontend/
 | Imágenes e íconos de la interfaz | `frontend/src/shared/` si se importan desde código; `frontend/public/` si no | Sí |
 | Reportes Excel generados | Se generan en memoria y se descargan por la API | **No** |
 | Diagramas | `docs/arquitectura/diagramas/` o `docs/features/<cu>/diagramas/` | Sí, solo la fuente (`.drawio`, `.puml`) |
-| Compilados (`backend/target/`, `frontend/dist/`), `node_modules/`, IDE (`.idea/`, `.vscode/`), logs | — | **No** |
+| Compilados (`backend/build/`, `backend/.gradle/`, `frontend/dist/`), `node_modules/`, IDE (`.idea/`, `.vscode/`), logs | — | **No** |
 | Dependencias exactas del frontend | `frontend/package-lock.json` | **Sí** |
 
 ---
@@ -380,8 +380,8 @@ Estas reglas aplican a `docs/`. El código de backend y frontend sigue las conve
 | Elemento | Regla | Ejemplo |
 |---|---|---|
 | Paquete | Minúsculas, una palabra, sin tildes | `liquidacion`, `persistence` |
-| Capas y paquetes técnicos | Inglés, como en `general.md` | `domain`, `service`, `adapter/rest` |
-| Áreas y clases de negocio | Español, igual que el glosario | `liquidacion`, `PartidaCosto` |
+| Capas y paquetes técnicos | Inglés, como en `general.md` | `domain`, `application`, `adapter/rest` |
+| Clases de negocio | Español, igual que el glosario | `Liquidacion`, `PartidaCostoLote` |
 | Clase | `PascalCase` | `GenerarLiquidacionService` |
 | Método y variable | `camelCase` | `calcularUtilidadNeta`, `precioKgCop` |
 | Constante | `MAYUSCULAS_CON_GUION_BAJO` | `ESCALA_PORCENTAJE` |
@@ -391,19 +391,20 @@ Estas reglas aplican a `docs/`. El código de backend y frontend sigue las conve
 | Rol | Sufijo | Capa | Ejemplo |
 |---|---|---|---|
 | Entidad de dominio | sin sufijo | `domain` | `Liquidacion` |
-| Interfaz de repositorio o puerto | `Repository` / `Port` | `domain` | `LiquidacionRepository`, `Modulo2Port` |
+| Puerto de entrada (caso de uso) | `UseCase` | `domain/port/in` | `GenerarLiquidacionUseCase` |
+| DTO de caso de uso | `Dto` / `Command` | `domain/port/in/dto` | `LiquidacionDto`, `GenerarLiquidacionCommand` |
+| Puerto de salida | `Repository` / `Publisher` / `Port` | `domain/port/out` | `LiquidacionRepository`, `AvisoUtilizacionPublisher`, `GeneradorExcelPort` |
 | Excepción de negocio | `Exception` | `domain` | `LiquidacionYaAnuladaException` |
-| Caso de uso | `Service` | `service` | `AnularLiquidacionService` |
+| Implementación de un caso de uso | `Service` | `application` | `AnularLiquidacionService` |
 | Controlador REST | `Controller` | `infrastructure` | `LiquidacionController` |
 | DTO de entrada / salida | `Request` / `Response` | `infrastructure` | `GenerarLiquidacionRequest` |
 | Entidad JPA | `Entity` | `infrastructure` | `LiquidacionEntity` |
 | Repositorio Spring Data | `JpaRepository` | `infrastructure` | `LiquidacionJpaRepository` |
 | Implementación de un repositorio del dominio | `PersistenceAdapter` | `infrastructure` | `LiquidacionPersistenceAdapter` |
 | Conversión entre modelos | `Mapper` | `infrastructure` | `LiquidacionEntityMapper` |
-| Cliente de otro módulo | `Client` | `infrastructure` | `Modulo1Client` |
-| Evento Kafka | `Event` | `infrastructure` | `LiquidacionGeneradaEvent` |
-| Consumidor / productor Kafka | `Consumer` / `Producer` | `infrastructure` | `ResultadoSacrificioConsumer` |
-| Configuración | `Config` | `infrastructure` | `SecurityConfig` |
+| Evento Kafka (contrato JSON) | `Event` | `infrastructure` | `ResultadoSacrificioPublicadoEvent` |
+| Consumidor / productor Kafka | `Consumer` / `Producer` | `infrastructure` | `Modulo2EventConsumer`, `AvisoUtilizacionKafkaProducer` |
+| Configuración | `Config` | `infrastructure` | `KafkaConfig` |
 
 ### Frontend (React)
 
@@ -414,7 +415,7 @@ Estas reglas aplican a `docs/`. El código de backend y frontend sigue las conve
 | Componente | `PascalCase.tsx`, un componente exportado por archivo | `MatrizVentaFinal.tsx` |
 | Página (una ruta) | `PascalCase` + `Page` | `GenerarLiquidacionPage.tsx` |
 | Diálogo / modal | `PascalCase` + `Dialog` | `AnularLiquidacionDialog.tsx` |
-| Hook | `use` + `PascalCase`, `.ts` | `useGalpones.ts` |
+| Hook | `use` + `PascalCase`, `.ts` | `useLotes.ts` |
 | Llamadas a la API | `<area>Api.ts` | `liquidacionApi.ts` |
 | Otros módulos TypeScript | `camelCase.ts` | `formatCop.ts`, `httpClient.ts` |
 | Tipos de una feature | `types.ts` | `features/liquidacion/types.ts` |
@@ -427,11 +428,11 @@ Estas reglas aplican a `docs/`. El código de backend y frontend sigue las conve
 
 | Elemento | Regla | Ejemplo |
 |---|---|---|
-| Migración Flyway | `V<n>__<descripcion_en_snake_case>.sql`, numeración consecutiva; una migración aplicada no se edita | `V3__crear_tabla_partida_costo.sql` |
+| Migración Flyway | `V<n>__<verbo>_<objeto>.sql` en inglés y `snake_case`, igual que las de `general.md`; numeración consecutiva; una migración aplicada no se edita | `V4__add_index_liquidacion_estado.sql` |
 | Datos de demostración | Numeración desde `V1000` para no chocar con el esquema | `V1000__datos_demo_galpones.sql` |
 | Tablas y columnas | `snake_case`, en singular | `liquidacion`, `precio_kg_cop` |
 | Perfil de configuración | `application-<perfil>.yml` | `application-dev.yml` |
-| Fixture de pruebas | `kebab-case.json` dentro de la carpeta del módulo origen | `fixtures/m2/resultado-sacrificio.json` |
+| Fixture de pruebas (evento Kafka) | `kebab-case.json` dentro de la carpeta del módulo origen | `fixtures/m2/resultado-sacrificio.json` |
 
 ---
 
@@ -439,13 +440,13 @@ Estas reglas aplican a `docs/`. El código de backend y frontend sigue las conve
 
 Estas reglas son del backend; las del frontend están en la [sección 8](#reglas-del-frontend).
 
-1. **Capa primero, área después.** Una clase nueva se ubica respondiendo dos preguntas: ¿a qué capa pertenece? y ¿de qué área funcional es?
-2. **No se crean paquetes por tipo dentro de un área** (`models/`, `dtos/`, `exceptions/`, `utils/`). Las clases de un área viven juntas y su sufijo indica el rol. Las excepciones de negocio van en el área a la que pertenecen.
-3. **Excepción:** `infrastructure/adapter/client/` se divide por módulo de origen (`m1/`, `m2/`), no por área.
+1. **Capa primero, tipo de pieza después.** Una clase nueva se ubica respondiendo: ¿a qué capa pertenece? y ¿qué pieza es (modelo, puerto de entrada o salida, servicio, adaptador)? El árbol oficial está en `general.md`.
+2. **No se crean paquetes por área funcional** (`liquidacion/`, `costos/`) ni paquetes de tipo fuera de los definidos (`models/`, `dtos/`, `utils/`). El sufijo y el nombre de la clase indican rol y área.
+3. **Excepción:** `application/service/sync/` agrupa el procesamiento de eventos de M1 y M2, y `domain/port/in/dto/evento/` sus datos de entrada.
 4. **Lo que usan varias áreas** va en `domain/shared/`. No se crean paquetes `util`, `common` ni `helpers`.
 5. **Las pruebas siguen al código.** Si una clase se mueve de paquete, su prueba se mueve en el mismo commit.
 6. **Una clase pública por archivo**, con el mismo nombre del archivo.
-7. **Profundidad máxima:** capa → (adaptador) → área. Si hace falta un nivel más, se discute antes.
+7. **Profundidad máxima:** la de `general.md` (p. ej. `domain/port/in/dto/evento`). Si hace falta un nivel más, se discute antes.
 8. **`.gitkeep` solo mientras la carpeta esté vacía.** El esqueleto inicial los usa para que Git conserve las carpetas; se borran en el mismo commit que agrega el primer archivo real.
 
 ---
@@ -459,5 +460,5 @@ Agregar, renombrar o mover carpetas de primer o segundo nivel, crear un área fu
 3. Los movimientos de archivos se hacen con un commit `refactor` que **solo mueve**, sin cambiar contenido, para que Git conserve el historial.
 
 ```
-refactor: mueve clases de sincronización al área integracion
+refactor: mueve los servicios de sincronización a application/service/sync
 ```

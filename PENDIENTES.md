@@ -4,17 +4,18 @@ Lista de tareas pendientes y acuerdos del equipo para las siguientes fases.
 
 ## Arquitectura y Frontend
 
-- [ ] Definir la tecnología y arquitectura oficial del Frontend (React/Vite o alternativa acordada) y diseñar las pantallas P1 a P5.
+- [ ] Diseñar las pantallas P1 a P5 en el frontend (React + TypeScript + Vite), incluido el indicador de sincronización (RT-09) y el campo de usuario responsable en generar y anular.
 - [ ] Exportar a Excel (CU05): implementación técnica con Apache POI (`poi-ooxml`).
 
 ## Coordinación con Módulo 1 y Módulo 2
 
-- [ ] Decisiones D-01 a D-07 con los equipos de M1 y M2 (ver `docs/requisitos/especificacion-general.md` y `docs/arquitectura/general.md`).
-- [ ] Confirmar los nombres de tópicos Kafka (`avicontrol.m2.resultados-sacrificio`) y formato de eventos con M2.
-- [ ] Confirmar nombres exactos de campos en DTOs REST con M1 (`idGalpon` vs `galponId`).
+- [ ] Decisiones D-01 a D-08 con los equipos de M1 y M2 (ver `docs/requisitos/especificacion-general.md`).
+- [ ] D-08: acordar que M1 y M2 publiquen sus eventos en Kafka con los tópicos y campos del plan 001 (`docs/planes/001-sincronizacion-m1-m2.md`), o ajustar el contrato a lo que publiquen.
+- [ ] D-03: acordar con M2 el formato y la confirmación del aviso de utilización (`avicontrol.m3.avisos-utilizacion`), y que no corrija un resultado ya avisado (es definitivo para M3).
 
 ## Construcción del Backend
 
-- [ ] Crear el archivo de configuración `build.gradle` con Spring Boot 3.3.x, Flyway, PostgreSQL, Kafka y Apache POI.
-- [ ] Crear los scripts de migración Flyway en `backend/src/main/resources/db/migration/` (`V1__init_schema.sql`, `V2__seed_test_data.sql`).
-- [ ] Implementar la suite de pruebas unitarias (JUnit 5 / Mockito) y pruebas de arquitectura con ArchUnit.
+- [ ] Crear `backend/build.gradle` y `settings.gradle` con Spring Boot 4.1.x, Spring Kafka, Flyway, PostgreSQL, Apache POI, springdoc, Testcontainers y ArchUnit.
+- [ ] Crear `compose.yaml` con PostgreSQL y Kafka para desarrollo local.
+- [ ] Crear las migraciones Flyway en `backend/src/main/resources/db/migration/` (`V1__create_sync_tables.sql`, `V2__create_partidas_tables.sql`, `V3__create_liquidacion_tables.sql`) y los datos de demostración en `db/seed/`.
+- [ ] Implementar la suite de pruebas unitarias (JUnit 5 / Mockito), de integración (Testcontainers) y de arquitectura (ArchUnit).

@@ -1,7 +1,7 @@
 # Feature Specification: M3-CU03 – Generar Liquidación del Lote
 
 **Created**: 2026-08-31  
-**Actualizado**: 2026-10-05  
+**Actualizado**: 2026-10-23  
 **Módulo**: 3 – Liquidación de Lote y Análisis de Rentabilidad (AVICONTROL)  
 **Rol Principal**: Administrador Financiero  
 
@@ -47,9 +47,9 @@ Como administrador financiero, quiero generar la Liquidación económica definit
    - **Then** el sistema detiene el proceso, no genera registros preliminares ni parciales, y muestra la lista detallada de partidas pendientes de valorización
 
 5. **Scenario**: Ausencia total de partidas de costo sincronizadas
-   - **Given** un lote liquidable para el cual M3 no cuenta con partidas de alimento ni de medicina sincronizadas desde Módulo 2
+   - **Given** un lote liquidable para el cual M3 no cuenta con partidas de alimento sincronizadas desde Módulo 2 (la ausencia de consumos de medicamento es válida, M3-CU10.FR-007)
    - **When** se intenta generar la Liquidación
-   - **Then** el sistema notifica "No hay partidas de costo sincronizadas para este ciclo" y mantiene bloqueada la Liquidación
+   - **Then** el sistema notifica "No hay partidas de alimento sincronizadas para este ciclo" y mantiene bloqueada la Liquidación
 
 6. **Scenario**: Mortalidad del 100% (siniestro total)
    - **Given** una alerta de vaciado sanitario que identifica un lote con 9.000 aves iniciales, población actual sincronizada igual a 0 por mortalidad total, ningún resultado final de sacrificio y partidas de costo del ciclo por \$40.000.000 COP
@@ -72,9 +72,9 @@ Como administrador financiero, quiero generar la Liquidación económica definit
    - **Then** el sistema crea la nueva Liquidación en estado `ACTIVA` y conserva la anterior en estado `ANULADA` para auditoría
 
 10. **Scenario**: Indisponibilidad temporal de los módulos de origen
-    - **Given** Módulo 1 o Módulo 2 no responden y M3 cuenta con los datos locales sincronizados requeridos para el lote
+    - **Given** Módulo 1 o Módulo 2 no publican eventos o el broker no está disponible, y M3 cuenta con los datos locales sincronizados requeridos para el lote
     - **When** el administrador solicita generar la Liquidación
-    - **Then** el sistema genera la Liquidación usando esos datos, conserva la fecha y hora de sincronización de cada fuente en el snapshot financiero y no realiza consultas en vivo a los módulos de origen
+    - **Then** el sistema genera la Liquidación usando esos datos, conserva la fecha y hora de sincronización de cada fuente en el snapshot financiero y no requiere comunicación en vivo con los módulos de origen
 
 11. **Scenario**: Consulta de una Liquidación existente
     - **Given** un lote con una Liquidación generada, en estado `ACTIVA` o `ANULADA`
@@ -130,16 +130,16 @@ Como administrador financiero, quiero generar la Liquidación económica definit
 - **FR-008**: El sistema MUST guardar la Liquidación con estado `ACTIVA`, fecha y hora de generación y usuario responsable. Toda Liquidación `ACTIVA` es inmutable; su corrección se ejecuta exclusivamente mediante el flujo de anulación definido en **M3-CU04 – Anular Liquidación**. El lote solo admite una nueva Liquidación cuando la anterior haya sido anulada formalmente.
 - **FR-009**: El sistema MUST generar la Liquidación exclusivamente con datos locales sincronizados cuyo origen sea Módulo 1 (M3-CU07) o Módulo 2 (M3-CU08, M3-CU09, M3-CU10), y MUST conservar en el snapshot financiero la fecha y hora de sincronización de cada fuente. La generación NO DEBE requerir consultas en vivo a los módulos de origen. Si no existen las copias locales requeridas, el sistema MUST bloquear la generación e informar que no hay datos disponibles.
 - **FR-010**: Al persistir una Liquidación `ACTIVA` que consume un resultado final de sacrificio, el sistema MUST marcar localmente ese resultado como utilizado y MUST emitir el aviso de utilización definido en **M3-CU08**.
-- **FR-011**: El sistema MUST capturar manualmente, como único dato de entrada del administrador financiero, el **precio por kilogramo** en pesos colombianos (decimal positivo mayor que 0). MUST rechazar un precio menor o igual a cero.
+- **FR-011**: El sistema MUST capturar manualmente, como únicos datos de entrada del administrador financiero, el **precio por kilogramo** en pesos colombianos (decimal positivo mayor que 0) y el **nombre del usuario responsable** (texto obligatorio; la plataforma no tiene login). MUST rechazar un precio menor o igual a cero y un nombre vacío.
 - **FR-012**: El sistema MUST tomar la cantidad final de pollos vendidos y el peso total exclusivamente del resultado final de sacrificio sincronizado (M3-CU08), MUST calcular `pesoPromedioKg = pesoTotalKg / pollosVendidos` solo con fines de presentación y NO DEBE editar ninguno de los valores operativos de origen.
 - **FR-013**: El sistema MUST presentar la Liquidación generada como **Matriz de Venta Final**: los cuatro indicadores (Venta Bruta, Mortalidad del Lote, Costos Operativos, Utilidad Neta) y los datos de venta que los sustentan (pollos vendidos, peso total, peso promedio, precio por kg).
 - **FR-014**: El sistema MUST permitir consultar una Liquidación existente, `ACTIVA` o `ANULADA`, desde el historial (M3-CU06) y, justo después de generarla, como resultado de la confirmación. La lista de lotes (M3-CU01) no muestra lotes con Liquidación `ACTIVA` (M3-CU01.FR-014). La vista MUST presentar la Matriz de Venta Final (FR-013) con los valores congelados del snapshot, los subtotales de Costos Operativos por categoría (Alimento, Insumos Médicos, Costo de Población), la fecha, hora y usuario de generación y la fecha y hora de sincronización de cada fuente (RT-09). Desde esta vista el sistema MUST ofrecer la consulta del Desglose (M3-CU05) y, únicamente para una Liquidación `ACTIVA`, el inicio de su anulación (M3-CU04). Para una Liquidación `ANULADA` MUST mostrar su registro de anulación. La consulta NO DEBE recalcular ningún valor ni requerir consultas a Módulo 1 o Módulo 2.
-- **FR-015**: El sistema MUST generar la Liquidación en **dos pasos**: (1) **captura** del precio por kg (FR-011) junto con el resultado final de sacrificio que lo sustenta, con la acción "Siguiente"; (2) **vista previa** no persistida que presenta la Matriz de Venta Final (FR-013), los subtotales de Costos Operativos por categoría y la Mortalidad del Lote, con las acciones "Volver" y "Generar liquidación". La Liquidación MUST persistirse únicamente al confirmar "Generar liquidación" en la vista previa, con los mismos valores mostrados. "Volver" MUST regresar a la captura sin crear registro alguno. La vista previa MUST identificarse con un aviso visible de que la Liquidación aún no ha sido generada (por ejemplo, "Vista previa · sin generar"); ese aviso NO es un estado de la Liquidación, cuyos únicos estados son `ACTIVA` y `ANULADA`. En siniestro total (FR-005) el paso de captura no solicita precio por kg. Las validaciones de FR-005, FR-006, FR-007 y FR-009 MUST ejecutarse antes de mostrar la vista previa y nuevamente al confirmar.
+- **FR-015**: El sistema MUST generar la Liquidación en **dos pasos**: (1) **captura** del precio por kg y del usuario responsable (FR-011) junto con el resultado final de sacrificio que lo sustenta, con la acción "Siguiente"; (2) **vista previa** no persistida que presenta la Matriz de Venta Final (FR-013), los subtotales de Costos Operativos por categoría y la Mortalidad del Lote, con las acciones "Volver" y "Generar liquidación". La Liquidación MUST persistirse únicamente al confirmar "Generar liquidación" en la vista previa, con los mismos valores mostrados. "Volver" MUST regresar a la captura sin crear registro alguno. La vista previa MUST identificarse con un aviso visible de que la Liquidación aún no ha sido generada (por ejemplo, "Vista previa · sin generar"); ese aviso NO es un estado de la Liquidación, cuyos únicos estados son `ACTIVA` y `ANULADA`. En siniestro total (FR-005) el paso de captura no solicita precio por kg, pero sí el usuario responsable. Las validaciones de FR-005, FR-006, FR-007 y FR-009 MUST ejecutarse antes de mostrar la vista previa y nuevamente al confirmar.
 
 ### Key Entities
 
-- **Liquidacion**: Resultado financiero consolidado del lote y único Documento Financiero del módulo. Atributos clave: `idLiquidacion`, `idLote`, `idGalpon`, `idResultadoSacrificio` (nulo únicamente en siniestro total), `pollosVendidos` (origen M2), `pesoTotalKg` (origen M2), `pesoPromedioKg` (calculado, solo presentación), `precioKgCop` (ingresado; nulo en siniestro total), `ventaBrutaCop`, `mortalidadAves`, `porcentajeMortalidad`, `costosOperativosCop`, `utilidadNetaCop`, `estado` (`ACTIVA` | `ANULADA`), `fechaHoraGeneracion`, `usuarioResponsable`.
-- **ResultadoFinalSacrificio**: Resultado operativo originado en Módulo 2 y obtenido por M3 mediante consulta (M3-CU08). Atributos sincronizados: `idResultado`, `idLote`, `idGalpon`, `cantidadFinalPollos`, `pesoTotalKg`, `fechaRegistro`, `fechaHoraSincronizacion`, `estadoUtilizacionLocal`.
+- **Liquidacion**: Resultado financiero consolidado del lote y único Documento Financiero del módulo. Atributos clave: `idLiquidacion`, `idLote`, `idGalpon`, `idResultadoSacrificio` (nulo únicamente en siniestro total), `pollosVendidos` (origen M2; 0 en siniestro total), `pesoTotalKg` (origen M2; 0 en siniestro total), `pesoPromedioKg` (calculado, solo presentación), `precioKgCop` (ingresado; nulo en siniestro total), `ventaBrutaCop`, `mortalidadAves`, `porcentajeMortalidad`, `costosOperativosCop`, `utilidadNetaCop`, `estado` (`ACTIVA` | `ANULADA`), `fechaHoraGeneracion`, `usuarioResponsable`.
+- **ResultadoFinalSacrificio**: Resultado operativo originado en Módulo 2 y recibido por M3 como evento Kafka en su copia local (M3-CU08). Atributos sincronizados: `idResultado`, `idLote`, `idGalpon`, `cantidadFinalPollos`, `pesoTotalKg`, `fechaRegistro`, `fechaHoraSincronizacion`, `estadoUtilizacionLocal`.
 - **PartidaCostoLote**: Partida de costo sincronizada y valorizada asociada al ciclo del lote. Atributos: `idPartida`, `idLote`, `categoria` (`ALIMENTO` | `MEDICINA` | `POBLACION`), `concepto`, `cantidad`, `unidadMedida`, `precioUnitarioCop`, `subtotalCop`, `fuenteOrigen`, `referenciaOrigen`.
 - **SnapshotDatosOrigen**: Datos sincronizados utilizados para una Liquidación. Atributos: `idLiquidacion`, `idLote`, `fuente` (`MODULO_1` | `MODULO_2`), `fechaHoraSincronizacion` y referencias a las poblaciones, al resultado de sacrificio y a las partidas de costo empleadas.
 - **AlertaVaciadoSanitario**: Evento registrado por Módulo 1 que conserva `idAlerta`, `idGalpon`, `idLote` y `fechaHoraEvento` después de desvincular el lote del galpón; es la referencia que identifica al lote liquidable.
