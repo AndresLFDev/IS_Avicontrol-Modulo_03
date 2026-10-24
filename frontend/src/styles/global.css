@@ -1,0 +1,15 @@
+@import 'tailwindcss';
+
+/* Colores del módulo: se usan como clases de Tailwind (bg-primario, text-error…). */
+@theme {
+  --color-primario: #1f5f3f;
+  --color-fondo: #f6f7f5;
+  --color-texto: #1d1d1d;
+  --color-error: #b3261e;
+}
+
+@layer base {
+  body {
+    @apply bg-fondo font-sans text-texto;
+  }
+}

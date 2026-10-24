@@ -276,7 +276,7 @@ backend/src/test/
 
 ## 8. Frontend (`frontend/`)
 
-React con TypeScript y Vite. Pruebas con Vitest y Testing Library.
+React con TypeScript y Vite. Estilos con Tailwind CSS: clases utilitarias en el propio componente y colores del tema en `styles/global.css` (`@theme`); un `.module.css` solo cuando Tailwind no alcance. Pruebas con Vitest y Testing Library; lint con oxlint y formato con Prettier.
 
 ```
 frontend/

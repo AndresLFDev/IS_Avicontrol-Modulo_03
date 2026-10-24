@@ -37,3 +37,10 @@ build/
 Thumbs.db
 desktop.ini
 *.log
+
+### Frontend ###
+node_modules/
+frontend/dist/
+frontend/coverage/
+*.local
+frontend/.env
