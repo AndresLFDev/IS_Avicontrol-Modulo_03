@@ -58,3 +58,6 @@ sync:
 
 avisos:
   intervalo: PT1M # frecuencia de publicación de avisos de utilización pendientes
+
+cors:
+  origenes-permitidos: ${CORS_ORIGENES:http://localhost:5173} # separados por coma

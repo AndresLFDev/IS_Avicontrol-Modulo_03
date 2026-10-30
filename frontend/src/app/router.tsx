@@ -1,4 +1,5 @@
 import { createBrowserRouter, type RouteObject } from 'react-router'
+import ListaLotesPage from '../features/lotes/ListaLotesPage.tsx'
 import Layout from './Layout.tsx'
 import NoEncontradoPage from './NoEncontradoPage.tsx'
 
@@ -8,7 +9,7 @@ export const routes: RouteObject[] = [
     path: '/',
     element: <Layout />,
     children: [
-      { index: true, element: <p>Seleccione una opción del menú.</p> },
+      { index: true, element: <ListaLotesPage /> },
       { path: '*', element: <NoEncontradoPage /> },
     ],
   },
