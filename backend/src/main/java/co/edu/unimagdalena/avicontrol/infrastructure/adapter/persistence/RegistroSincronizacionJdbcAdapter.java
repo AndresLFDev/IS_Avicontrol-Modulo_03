@@ -20,15 +20,16 @@ public class RegistroSincronizacionJdbcAdapter implements RegistroSincronizacion
 
   @Override
   public Optional<Instant> ultimaSincronizacionExitosa(FuenteSincronizacion fuente) {
-    OffsetDateTime ultima =
-        jdbc.sql(
-                """
-                SELECT MAX(fecha_hora_fin) FROM registro_sincronizacion
-                 WHERE fuente = :fuente AND resultado = 'EXITOSA'
-                """)
-            .param("fuente", fuente.name())
-            .query((rs, fila) -> rs.getObject(1, OffsetDateTime.class))
-            .single();
-    return Optional.ofNullable(ultima).map(OffsetDateTime::toInstant);
+    // Sin filas devuelve vacío: antes de la primera sincronización exitosa la fuente no tiene fecha
+    return jdbc.sql(
+            """
+            SELECT fecha_hora_fin FROM registro_sincronizacion
+             WHERE fuente = :fuente AND resultado = 'EXITOSA' AND fecha_hora_fin IS NOT NULL
+             ORDER BY fecha_hora_fin DESC
+             LIMIT 1
+            """)
+        .param("fuente", fuente.name())
+        .query((rs, fila) -> rs.getObject(1, OffsetDateTime.class).toInstant())
+        .optional();
   }
 }
