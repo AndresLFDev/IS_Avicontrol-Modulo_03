@@ -100,7 +100,16 @@ export default function ListaLotesPage() {
         <>
           <LotesTable
             lotes={datos.content}
-            onGenerar={(lote) => navigate(`/lotes/${lote.idLote}/liquidacion`)}
+            onGenerar={(lote) =>
+              // El estado evita pedir de nuevo el lote en la captura de CU03
+              navigate(`/lotes/${lote.idLote}/liquidacion`, {
+                state: {
+                  nombreLote: lote.nombreLote,
+                  nombreGalpon: lote.nombreGalpon,
+                  siniestroTotal: lote.siniestroTotal,
+                },
+              })
+            }
           />
           <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
             <span>Mostrando {datos.mensaje}</span>

@@ -1,6 +1,11 @@
 package co.edu.unimagdalena.avicontrol.infrastructure.exception;
 
+import co.edu.unimagdalena.avicontrol.domain.exception.LiquidacionNoEncontradaException;
+import co.edu.unimagdalena.avicontrol.domain.exception.LiquidacionYaExistenteException;
+import co.edu.unimagdalena.avicontrol.domain.exception.LoteNoEncontradoException;
+import co.edu.unimagdalena.avicontrol.domain.exception.LoteNoLiquidableException;
 import co.edu.unimagdalena.avicontrol.domain.exception.ParametroInvalidoException;
+import co.edu.unimagdalena.avicontrol.domain.exception.VistaPreviaDesactualizadaException;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import java.net.URI;
@@ -136,6 +141,77 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     return validacion(List.of(new ErrorCampo(ex.getCampo(), ex.getMessage())), request);
   }
 
+  @ExceptionHandler(LoteNoEncontradoException.class)
+  public ResponseEntity<Object> handleLoteNoEncontrado(
+      LoteNoEncontradoException ex, WebRequest request) {
+    return respuesta(
+        problema(
+            HttpStatus.NOT_FOUND,
+            "lote-no-encontrado",
+            "Recurso no encontrado",
+            ex.getMessage(),
+            request));
+  }
+
+  @ExceptionHandler(LiquidacionNoEncontradaException.class)
+  public ResponseEntity<Object> handleLiquidacionNoEncontrada(
+      LiquidacionNoEncontradaException ex, WebRequest request) {
+    return respuesta(
+        problema(
+            HttpStatus.NOT_FOUND,
+            "liquidacion-no-encontrada",
+            "Recurso no encontrado",
+            ex.getMessage(),
+            request));
+  }
+
+  /** CU03.FR-007; {@code idLiquidacionActiva} permite ofrecer "Ver liquidación" o "Anular". */
+  @ExceptionHandler(LiquidacionYaExistenteException.class)
+  public ResponseEntity<Object> handleLiquidacionYaExistente(
+      LiquidacionYaExistenteException ex, WebRequest request) {
+    var problema =
+        problema(
+            HttpStatus.CONFLICT,
+            "liquidacion-ya-existente",
+            "Conflicto de Liquidación",
+            ex.getMessage(),
+            request);
+    if (ex.getIdLiquidacionActiva() != null) {
+      problema.setProperty("idLiquidacionActiva", ex.getIdLiquidacionActiva());
+    }
+    return respuesta(problema);
+  }
+
+  @ExceptionHandler(VistaPreviaDesactualizadaException.class)
+  public ResponseEntity<Object> handleVistaPreviaDesactualizada(
+      VistaPreviaDesactualizadaException ex, WebRequest request) {
+    return respuesta(
+        problema(
+            HttpStatus.CONFLICT,
+            "vista-previa-desactualizada",
+            "Los datos cambiaron",
+            ex.getMessage(),
+            request));
+  }
+
+  /** Precondiciones de CU03: {@code causa} y, si faltan precios, {@code partidasPendientes}. */
+  @ExceptionHandler(LoteNoLiquidableException.class)
+  public ResponseEntity<Object> handleLoteNoLiquidable(
+      LoteNoLiquidableException ex, WebRequest request) {
+    var problema =
+        problema(
+            HttpStatus.UNPROCESSABLE_CONTENT,
+            "lote-no-liquidable",
+            "Lote no apto para liquidar",
+            ex.getMessage(),
+            request);
+    problema.setProperty("causa", ex.getCausa().name());
+    if (!ex.getPartidasPendientes().isEmpty()) {
+      problema.setProperty("partidasPendientes", ex.getPartidasPendientes());
+    }
+    return respuesta(problema);
+  }
+
   /** Cualquier error no controlado: {@code 500 error-interno}, sin exponer trazas. */
   @ExceptionHandler(Exception.class)
   public ResponseEntity<Object> handleNoControlada(Exception ex, WebRequest request) {
@@ -165,6 +241,10 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
       completar(problema, request);
     }
     return super.handleExceptionInternal(ex, body, headers, statusCode, request);
+  }
+
+  private static ResponseEntity<Object> respuesta(ProblemDetail problema) {
+    return ResponseEntity.status(problema.getStatus()).body(problema);
   }
 
   private ResponseEntity<Object> validacion(List<ErrorCampo> errores, WebRequest request) {
