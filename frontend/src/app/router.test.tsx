@@ -7,9 +7,21 @@ function renderEn(ruta: string) {
 }
 
 describe('router', () => {
-  it('muestra el layout del módulo en la raíz', () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(() => new Promise(() => {})),
+    )
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('muestra la lista de lotes en la raíz', () => {
     renderEn('/')
     expect(screen.getByText('AviControl')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Lista de Lotes' })).toBeInTheDocument()
   })
 
   it('muestra la página de no encontrado en una ruta desconocida', () => {

@@ -1,5 +1,6 @@
 package co.edu.unimagdalena.avicontrol.infrastructure.exception;
 
+import co.edu.unimagdalena.avicontrol.domain.exception.ParametroInvalidoException;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import java.net.URI;
@@ -126,6 +127,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             .map(v -> new ErrorCampo(ultimoNodo(v), v.getMessage()))
             .toList();
     return validacion(errores, request);
+  }
+
+  /** Parámetro que viola una regla de un caso de uso (p. ej. {@code etapa=LIQUIDADO} en CU01). */
+  @ExceptionHandler(ParametroInvalidoException.class)
+  public ResponseEntity<Object> handleParametroInvalido(
+      ParametroInvalidoException ex, WebRequest request) {
+    return validacion(List.of(new ErrorCampo(ex.getCampo(), ex.getMessage())), request);
   }
 
   /** Cualquier error no controlado: {@code 500 error-interno}, sin exponer trazas. */
