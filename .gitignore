@@ -14,7 +14,8 @@ node_modules/
 *.iws
 *.iml
 *.ipr
-out/
+/out/
+/backend/out/
 
 ### Eclipse ###
 .apt_generated
