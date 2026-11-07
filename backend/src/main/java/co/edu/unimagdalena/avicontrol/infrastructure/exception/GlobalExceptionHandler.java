@@ -1,5 +1,6 @@
 package co.edu.unimagdalena.avicontrol.infrastructure.exception;
 
+import co.edu.unimagdalena.avicontrol.domain.exception.ExportacionNoPermitidaException;
 import co.edu.unimagdalena.avicontrol.domain.exception.LiquidacionNoEncontradaException;
 import co.edu.unimagdalena.avicontrol.domain.exception.LiquidacionYaAnuladaException;
 import co.edu.unimagdalena.avicontrol.domain.exception.LiquidacionYaExistenteException;
@@ -197,6 +198,19 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             request);
     problema.setProperty("registroAnulacion", ex.getRegistroAnulacion());
     return respuesta(problema);
+  }
+
+  /** CU05.FR-004: una Liquidación ANULADA no se exporta. */
+  @ExceptionHandler(ExportacionNoPermitidaException.class)
+  public ResponseEntity<Object> handleExportacionNoPermitida(
+      ExportacionNoPermitidaException ex, WebRequest request) {
+    return respuesta(
+        problema(
+            HttpStatus.CONFLICT,
+            "exportacion-no-permitida",
+            "Exportación no permitida",
+            ex.getMessage(),
+            request));
   }
 
   @ExceptionHandler(VistaPreviaDesactualizadaException.class)

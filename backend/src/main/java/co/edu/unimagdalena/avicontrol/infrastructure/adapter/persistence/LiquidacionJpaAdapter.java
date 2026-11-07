@@ -7,6 +7,7 @@ import co.edu.unimagdalena.avicontrol.domain.model.DatosLiquidacion;
 import co.edu.unimagdalena.avicontrol.domain.model.EstadoLiquidacion;
 import co.edu.unimagdalena.avicontrol.domain.model.FuenteSincronizacion;
 import co.edu.unimagdalena.avicontrol.domain.model.Liquidacion;
+import co.edu.unimagdalena.avicontrol.domain.model.PartidaCosto;
 import co.edu.unimagdalena.avicontrol.domain.model.RegistroAnulacion;
 import co.edu.unimagdalena.avicontrol.domain.model.ResultadoSacrificio;
 import co.edu.unimagdalena.avicontrol.domain.model.SubtotalesCategoria;
@@ -19,6 +20,7 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -128,6 +130,21 @@ public class LiquidacionJpaAdapter implements LiquidacionRepository {
   }
 
   @Override
+  public List<PartidaCosto> buscarPartidas(long idLiquidacion) {
+    return jdbc.sql(
+            """
+            SELECT categoria, concepto, cantidad, unidad_medida, precio_unitario_cop,
+                   subtotal_cop, fuente_origen, referencia_origen
+              FROM partida_costo_lote
+             WHERE id_liquidacion = :id
+             ORDER BY id_partida
+            """)
+        .param("id", idLiquidacion)
+        .query(LiquidacionJpaAdapter::aPartida)
+        .list();
+  }
+
+  @Override
   public Optional<Liquidacion> bloquearParaAnular(long idLiquidacion) {
     return repositorio.findByIdConBloqueo(idLiquidacion).map(this::aDominio);
   }
@@ -203,6 +220,18 @@ public class LiquidacionJpaAdapter implements LiquidacionRepository {
         rs.getLong("costos_operativos_cop"),
         rs.getLong("utilidad_neta_cop"),
         rs.getString("estado"));
+  }
+
+  private static PartidaCosto aPartida(ResultSet rs, int fila) throws SQLException {
+    return new PartidaCosto(
+        CategoriaCosto.valueOf(rs.getString("categoria")),
+        rs.getString("concepto"),
+        rs.getBigDecimal("cantidad"),
+        rs.getString("unidad_medida"),
+        rs.getBigDecimal("precio_unitario_cop"),
+        rs.getLong("subtotal_cop"),
+        FuenteSincronizacion.valueOf(rs.getString("fuente_origen")),
+        rs.getString("referencia_origen"));
   }
 
   private static SnapshotDatosOrigenEntity snapshot(

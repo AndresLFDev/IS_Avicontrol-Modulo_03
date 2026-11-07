@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { ApiError, type ErrorCampo } from '../../shared/api/httpClient.ts'
+import Modal from '../../shared/ui/Modal.tsx'
 import { calcularVistaPrevia, generarLiquidacion } from './liquidacionApi.ts'
 import MatrizVentaFinal from './MatrizVentaFinal.tsx'
 import type {
@@ -42,7 +43,7 @@ function ErrorCampoTexto({ error, campo }: { error: ErrorPantalla | null; campo:
 }
 
 /** P2 — Generar Liquidación en dos pasos: captura y vista previa (M3-CU03.FR-015). */
-export default function GenerarLiquidacionPage() {
+export default function GenerarLiquidacionModal() {
   const { idLote = '' } = useParams()
   const desdeLista = useLocation().state as LoteParaLiquidar | null
   const { lote, cargando, error: errorLote } = useLoteParaLiquidar(idLote, desdeLista)
@@ -107,11 +108,12 @@ export default function GenerarLiquidacionPage() {
   }
 
   return (
-    <section className="mx-auto max-w-4xl space-y-4">
-      <Link to="/" className="text-sm text-primario underline">
-        ← Volver a la lista de lotes
-      </Link>
-      <h1 className="text-2xl font-bold">Generar liquidación</h1>
+    <Modal
+      titulo="Generar liquidación"
+      ancho={paso === 'previa' ? 'amplio' : 'normal'}
+      bloqueado={enviando}
+      onCerrar={() => navigate('/')}
+    >
       {lote && (
         <p className="font-semibold">
           {lote.nombreGalpon} · Lote {lote.nombreLote}
@@ -149,7 +151,7 @@ export default function GenerarLiquidacionPage() {
       )}
 
       {paso === 'captura' && lote && (
-        <form onSubmit={siguiente} className="space-y-4 rounded-lg bg-white p-5 shadow-sm">
+        <form onSubmit={siguiente} className="space-y-4">
           {siniestroTotal ? (
             <p className="rounded-md bg-red-100 p-3 text-sm text-error">
               Siniestro total: el lote no tuvo venta, así que no se ingresa precio por kg.
@@ -232,6 +234,6 @@ export default function GenerarLiquidacionPage() {
           </div>
         </div>
       )}
-    </section>
+    </Modal>
   )
 }

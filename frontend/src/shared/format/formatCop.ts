@@ -10,6 +10,7 @@ const COP_DECIMALES = new Intl.NumberFormat('es-CO', {
   maximumFractionDigits: 2,
 })
 const NUMERO = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 2 })
+const CANTIDAD = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 3 })
 
 /** Monto entero en pesos: 107100000 → "$ 107.100.000". */
 export function formatCop(valor: number) {
@@ -24,4 +25,9 @@ export function formatPrecio(valor: number) {
 /** Cantidad con separador de miles y hasta 2 decimales: 23800 → "23.800". */
 export function formatNumero(valor: number) {
   return NUMERO.format(valor)
+}
+
+/** Cantidad de una partida, que se guarda con 3 decimales: 12.125 → "12,125". */
+export function formatCantidad(valor: number) {
+  return CANTIDAD.format(valor)
 }

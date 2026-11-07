@@ -4,10 +4,12 @@ import co.edu.unimagdalena.avicontrol.domain.exception.LiquidacionYaExistenteExc
 import co.edu.unimagdalena.avicontrol.domain.model.CalculoLiquidacion;
 import co.edu.unimagdalena.avicontrol.domain.model.DatosLiquidacion;
 import co.edu.unimagdalena.avicontrol.domain.model.Liquidacion;
+import co.edu.unimagdalena.avicontrol.domain.model.PartidaCosto;
 import co.edu.unimagdalena.avicontrol.domain.model.RegistroAnulacion;
 import co.edu.unimagdalena.avicontrol.domain.port.in.dto.HistorialItemDto;
 import co.edu.unimagdalena.avicontrol.domain.shared.Pagina;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -29,6 +31,9 @@ public interface LiquidacionRepository {
       DatosLiquidacion datos, CalculoLiquidacion calculo, String usuario, Instant fechaHora);
 
   Optional<Liquidacion> buscarPorId(long idLiquidacion);
+
+  /** Partidas congeladas de la Liquidación, en el orden en que se registraron (M3-CU05). */
+  List<PartidaCosto> buscarPartidas(long idLiquidacion);
 
   /** Lee la Liquidación y bloquea su fila hasta el fin de la transacción (M3-CU04). */
   Optional<Liquidacion> bloquearParaAnular(long idLiquidacion);

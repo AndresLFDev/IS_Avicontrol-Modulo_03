@@ -296,7 +296,7 @@ frontend/
 │   │   │   ├── types.ts
 │   │   │   └── LotesTable.test.tsx
 │   │   ├── liquidacion/                  P2 Generar liquidación, P3 Anular (CU03, CU04)
-│   │   │   ├── GenerarLiquidacionPage.tsx
+│   │   │   ├── GenerarLiquidacionModal.tsx
 │   │   │   ├── MatrizVentaFinal.tsx
 │   │   │   ├── VerLiquidacionPage.tsx
 │   │   │   ├── AnularLiquidacionDialog.tsx

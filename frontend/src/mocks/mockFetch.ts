@@ -12,6 +12,7 @@ import type { EtapaLote, LotePage, LoteResumen } from '../features/lotes/types.t
 import type { ErrorCampo } from '../shared/api/httpClient.ts'
 import type { HistorialItem, HistorialPage } from '../features/reportes/types.ts'
 import { LOTES, type LoteMock, type PartidaMock } from './datos.ts'
+import { armarDesglose } from './desglose.ts'
 import { LIQUIDACIONES_HISTORICAS } from './historial.ts'
 
 const LATENCIA_MS = 150
@@ -363,6 +364,25 @@ function consultar(id: string): Liquidacion {
   return liquidacion
 }
 
+/** Sin POI no hay un .xlsx real: mejor un error claro que un archivo que Excel no abre. */
+function exportarExcel(id: string): never {
+  const { idLiquidacion, estado } = consultar(id)
+  if (estado === 'ANULADA') {
+    throw problema(
+      409,
+      'exportacion-no-permitida',
+      'Exportación no permitida',
+      `La Liquidación ${idLiquidacion} está anulada: su desglose es de solo lectura y no se puede exportar.`,
+    )
+  }
+  throw problema(
+    501,
+    'exportacion-no-simulada',
+    'Exportación no simulada',
+    'Generar el archivo requiere el backend real: usa npm run dev:backend.',
+  )
+}
+
 function todasLasLiquidaciones() {
   return [...LIQUIDACIONES_HISTORICAS, ...leerEstado().liquidaciones]
 }
@@ -454,6 +474,7 @@ export async function mockFetch(url: string, init: RequestInit = {}): Promise<Re
   const metodo = init.method ?? 'GET'
   const cuerpo: unknown = init.body ? JSON.parse(String(init.body)) : undefined
   const idLiquidacion = /^\/api\/v1\/liquidaciones\/([^/]+)$/.exec(pathname)?.[1]
+  const desglose = /^\/api\/v1\/liquidaciones\/([^/]+)\/desglose(\/excel)?$/.exec(pathname)
 
   try {
     if (metodo === 'GET' && pathname === '/api/v1/lotes') {
@@ -470,6 +491,10 @@ export async function mockFetch(url: string, init: RequestInit = {}): Promise<Re
     }
     if (metodo === 'POST' && pathname === '/api/v1/liquidaciones') {
       return json(201, generar(cuerpo as GenerarLiquidacionRequest))
+    }
+    if (metodo === 'GET' && desglose) {
+      const id = decodeURIComponent(desglose[1])
+      return desglose[2] ? exportarExcel(id) : json(200, armarDesglose(consultar(id)))
     }
     if (metodo === 'GET' && idLiquidacion) {
       return json(200, consultar(decodeURIComponent(idLiquidacion)))

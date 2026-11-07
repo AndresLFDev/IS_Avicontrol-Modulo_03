@@ -59,25 +59,6 @@ export default function VerLiquidacionPage() {
     siniestroTotal: liquidacion.siniestroTotal,
   }
 
-  if (anulando) {
-    return (
-      <section className="mx-auto max-w-3xl space-y-4">
-        <h1 className="text-2xl font-bold">
-          {liquidacion.nombreGalpon} · Lote {liquidacion.nombreLote}
-        </h1>
-        <AnularLiquidacion
-          liquidacion={liquidacion}
-          onCancelar={() => setAnulando(false)}
-          onTerminar={(mensaje) => {
-            setAviso(mensaje)
-            setAnulando(false)
-            setRecargas((n) => n + 1)
-          }}
-        />
-      </section>
-    )
-  }
-
   return (
     <section className="mx-auto max-w-4xl space-y-4">
       <Link to={volverA ?? '/'} className="text-sm text-primario underline">
@@ -124,17 +105,15 @@ export default function VerLiquidacionPage() {
         </div>
       )}
 
-      {/* El desglose llega con CU05 */}
       <div className="flex gap-3">
         {liquidacion.accionesDisponibles.includes('VER_DESGLOSE') && (
-          <button
-            type="button"
-            disabled
-            title="Disponible con M3-CU05"
-            className="rounded-md bg-black px-4 py-2 text-white disabled:opacity-40"
+          <Link
+            to={`/liquidaciones/${liquidacion.idLiquidacion}/desglose`}
+            state={{ volverA }}
+            className="rounded-md bg-black px-4 py-2 text-white"
           >
             Ver desglose
-          </button>
+          </Link>
         )}
         {liquidacion.accionesDisponibles.includes('ANULAR') && (
           <button
@@ -155,6 +134,18 @@ export default function VerLiquidacionPage() {
           </Link>
         )}
       </div>
+
+      {anulando && (
+        <AnularLiquidacion
+          liquidacion={liquidacion}
+          onCancelar={() => setAnulando(false)}
+          onTerminar={(mensaje) => {
+            setAviso(mensaje)
+            setAnulando(false)
+            setRecargas((n) => n + 1)
+          }}
+        />
+      )}
     </section>
   )
 }

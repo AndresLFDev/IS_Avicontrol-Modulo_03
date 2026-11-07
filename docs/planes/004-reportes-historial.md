@@ -151,6 +151,8 @@ HTTP/1.1 200 OK
       ]
     }
   ],
+  "mortalidadAves": 400,
+  "porcentajeMortalidad": 4.00,
   "costosOperativosCop": 60200000,
   "utilidadNetaCop": 79000000,
   "registroAnulacion": null,
@@ -268,6 +270,8 @@ public record DesgloseDto(
     boolean siniestroTotal,
     IngresosDto ingresos,
     List<CategoriaDesgloseDto> categorias,
+    int mortalidadAves,                       // indicador de la Matriz de Venta Final en el Excel (CU05.FR-003)
+    BigDecimal porcentajeMortalidad,
     long costosOperativosCop,
     long utilidadNetaCop,
     RegistroAnulacionDto registroAnulacion,   // null si está ACTIVA
@@ -290,8 +294,7 @@ public class ExportarExcelService implements ExportarExcelUseCase {
 
     // Constructor...
 
-    @Override
-    @Transactional(readOnly = true)
+    @Override   // sin transacción propia: la conexión no queda retenida mientras se escribe el libro
     public byte[] generarReporteExcelLiquidacion(Long idLiquidacion) {
         var desglose = consultarDesglose.consultarDesglose(idLiquidacion);   // 404 si no existe
         if (!desglose.exportacionPermitida()) {

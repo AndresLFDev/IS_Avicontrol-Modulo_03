@@ -33,6 +33,8 @@ export class ApiError extends Error {
   }
 }
 
+const ACEPTA_JSON = 'application/json, application/problem+json'
+
 /** Con VITE_USE_MOCKS=true responde el backend simulado; la compilación de producción no lo incluye. */
 async function enviar(url: string, init: RequestInit) {
   if (import.meta.env.VITE_USE_MOCKS === 'true') {
@@ -42,13 +44,18 @@ async function enviar(url: string, init: RequestInit) {
   return fetch(url, init)
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function ejecutar(
+  method: string,
+  path: string,
+  accept: string,
+  body?: unknown,
+): Promise<Response> {
   let respuesta: Response
   try {
     respuesta = await enviar(`${BASE_URL}${path}`, {
       method,
       headers: {
-        Accept: 'application/json, application/problem+json',
+        Accept: accept,
         ...(body !== undefined && { 'Content-Type': 'application/json' }),
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -65,6 +72,11 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   if (!respuesta.ok) {
     throw new ApiError(await leerProblema(respuesta))
   }
+  return respuesta
+}
+
+async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const respuesta = await ejecutar(method, path, ACEPTA_JSON, body)
   if (respuesta.status === 204) {
     return undefined as T
   }
@@ -87,4 +99,6 @@ export const httpClient = {
   post: <T>(path: string, body?: unknown) => request<T>('POST', path, body),
   put: <T>(path: string, body?: unknown) => request<T>('PUT', path, body),
   delete: <T = void>(path: string) => request<T>('DELETE', path),
+  /** Archivo binario; los errores llegan igual como `ApiError`. */
+  descargar: (path: string) => ejecutar('GET', path, '*/*').then((r) => r.blob()),
 }
