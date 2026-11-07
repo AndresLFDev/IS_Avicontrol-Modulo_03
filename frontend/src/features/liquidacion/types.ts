@@ -62,6 +62,17 @@ export interface GenerarLiquidacionRequest extends VistaPreviaRequest {
   huellaDatos: string
 }
 
+export interface AnulacionRequest {
+  motivo: string
+  usuario: string
+}
+
+export interface Anulacion {
+  idLiquidacion: number
+  estado: 'ANULADA'
+  registroAnulacion: RegistroAnulacion
+}
+
 /** Datos del lote que la lista envía al navegar, para no pedirlos de nuevo en la captura. */
 export interface LoteParaLiquidar {
   nombreLote: string

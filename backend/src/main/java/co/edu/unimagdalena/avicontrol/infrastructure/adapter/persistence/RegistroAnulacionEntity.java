@@ -11,7 +11,7 @@ import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import java.time.Instant;
 
-/** Tabla {@code registro_anulacion}. Se escribe en CU04; aquí solo se lee. */
+/** Tabla {@code registro_anulacion} (CU04). Se guarda en cascada desde la Liquidación. */
 @Entity
 @Table(name = "registro_anulacion")
 class RegistroAnulacionEntity {

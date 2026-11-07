@@ -1,6 +1,7 @@
 package co.edu.unimagdalena.avicontrol.infrastructure.exception;
 
 import co.edu.unimagdalena.avicontrol.domain.exception.LiquidacionNoEncontradaException;
+import co.edu.unimagdalena.avicontrol.domain.exception.LiquidacionYaAnuladaException;
 import co.edu.unimagdalena.avicontrol.domain.exception.LiquidacionYaExistenteException;
 import co.edu.unimagdalena.avicontrol.domain.exception.LoteNoEncontradoException;
 import co.edu.unimagdalena.avicontrol.domain.exception.LoteNoLiquidableException;
@@ -179,6 +180,21 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     if (ex.getIdLiquidacionActiva() != null) {
       problema.setProperty("idLiquidacionActiva", ex.getIdLiquidacionActiva());
     }
+    return respuesta(problema);
+  }
+
+  /** CU04 esc. 4: el registro existente acompaña al rechazo. */
+  @ExceptionHandler(LiquidacionYaAnuladaException.class)
+  public ResponseEntity<Object> handleLiquidacionYaAnulada(
+      LiquidacionYaAnuladaException ex, WebRequest request) {
+    var problema =
+        problema(
+            HttpStatus.CONFLICT,
+            "liquidacion-ya-anulada",
+            "Liquidación ya anulada",
+            ex.getMessage(),
+            request);
+    problema.setProperty("registroAnulacion", ex.getRegistroAnulacion());
     return respuesta(problema);
   }
 
