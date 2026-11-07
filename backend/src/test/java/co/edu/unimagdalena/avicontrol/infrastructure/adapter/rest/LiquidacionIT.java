@@ -1,14 +1,20 @@
 package co.edu.unimagdalena.avicontrol.infrastructure.adapter.rest;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import co.edu.unimagdalena.avicontrol.TestcontainersConfiguration;
+import co.edu.unimagdalena.avicontrol.domain.exception.LiquidacionYaAnuladaException;
 import co.edu.unimagdalena.avicontrol.domain.exception.LiquidacionYaExistenteException;
+import co.edu.unimagdalena.avicontrol.domain.port.in.AnularLiquidacionUseCase;
 import co.edu.unimagdalena.avicontrol.domain.port.in.GenerarLiquidacionUseCase;
 import co.edu.unimagdalena.avicontrol.domain.port.in.PreviewLiquidacionUseCase;
 import co.edu.unimagdalena.avicontrol.domain.port.in.dto.GenerarLiquidacionCommand;
@@ -20,6 +26,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,8 +40,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
 /**
- * Plan 003, T010: M3-CU03 de punta a punta contra PostgreSQL real, con los datos del Caso Dorado
- * (CU03 esc. 1), el siniestro total y la partida sin precio del seed de demostración.
+ * Plan 003, T010 y T016: M3-CU03 y M3-CU04 de punta a punta contra PostgreSQL real, con los datos
+ * del Caso Dorado (CU03 esc. 1), el siniestro total y la partida sin precio del seed de
+ * demostración.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -51,6 +59,7 @@ class LiquidacionIT {
   @Autowired private JdbcTemplate jdbc;
   @Autowired private PreviewLiquidacionUseCase vistaPrevia;
   @Autowired private GenerarLiquidacionUseCase generar;
+  @Autowired private AnularLiquidacionUseCase anular;
 
   @BeforeEach
   void cargarCopiaLocal() {
@@ -206,11 +215,7 @@ class LiquidacionIT {
   @Test
   void trasAnularSePuedeReliquidarYElAvisoNoSeDuplica() throws Exception {
     confirmar(DORADO, "4500", huella(DORADO, "4500")).andExpect(status().isCreated());
-    // CU04 aún no existe: se anula directamente en la base
-    jdbc.update("UPDATE liquidacion SET estado = 'ANULADA' WHERE id_liquidacion = 1");
-    jdbc.update(
-        "INSERT INTO registro_anulacion (id_liquidacion, motivo, fecha_hora_anulacion,"
-            + " usuario_responsable) VALUES (1, 'Error en el precio por kg', now(), 'Ana')");
+    anular(1, "Error en el precio por kg").andExpect(status().isOk());
 
     confirmar(DORADO, "4600", huella(DORADO, "4600"))
         .andExpect(status().isCreated())
@@ -262,6 +267,112 @@ class LiquidacionIT {
             jdbc.queryForObject(
                 "SELECT count(*) FROM liquidacion WHERE estado = 'ACTIVA'", Integer.class))
         .isEqualTo(1);
+  }
+
+  @Test
+  void anularConservaLosValoresYDevuelveElLoteALaLista() throws Exception {
+    confirmar(DORADO, "4500", huella(DORADO, "4500")).andExpect(status().isCreated());
+    mvc.perform(get("/api/v1/lotes"))
+        .andExpect(jsonPath("$.content[*].nombreLote", not(hasItem("L-2026-03"))));
+    var antes = liquidacion(1);
+    int partidas = cuenta("partida_costo_lote");
+
+    anular(1, "  Error en el precio por kg  ")
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.idLiquidacion").value(1))
+        .andExpect(jsonPath("$.estado").value("ANULADA"))
+        .andExpect(jsonPath("$.registroAnulacion.motivo").value("Error en el precio por kg"))
+        .andExpect(jsonPath("$.registroAnulacion.usuarioResponsable").value("Ana Ruiz"));
+
+    var despues = liquidacion(1);
+    for (var campo : new String[] {"estado", "registroAnulacion", "accionesDisponibles"}) {
+      antes.remove(campo);
+      despues.remove(campo);
+    }
+    assertThat(despues).isEqualTo(antes);
+    assertThat(cuenta("partida_costo_lote")).isEqualTo(partidas);
+    mvc.perform(get("/api/v1/lotes"))
+        .andExpect(jsonPath("$.content[*].nombreLote", hasItem("L-2026-03")));
+  }
+
+  @Test
+  void unaSegundaAnulacionResponde409ConElRegistroDeLaPrimera() throws Exception {
+    confirmar(DORADO, "4500", huella(DORADO, "4500")).andExpect(status().isCreated());
+    anular(1, "Error en el precio por kg").andExpect(status().isOk());
+
+    anular(1, "Otro motivo distinto al primero")
+        .andExpect(status().isConflict())
+        .andExpect(
+            jsonPath("$.type").value("https://avicontrol.edu.co/errors/liquidacion-ya-anulada"))
+        .andExpect(jsonPath("$.registroAnulacion.motivo").value("Error en el precio por kg"));
+    assertThat(cuenta("registro_anulacion")).isEqualTo(1);
+  }
+
+  @Test
+  void siFallaElRegistroNoQuedaAnulada() throws Exception {
+    confirmar(DORADO, "4500", huella(DORADO, "4500")).andExpect(status().isCreated());
+
+    // 501 caracteres: la columna motivo los rechaza después de cambiar el estado
+    assertThatThrownBy(() -> anular.anularLiquidacion(1L, "x".repeat(501), "Ana"))
+        .isInstanceOf(RuntimeException.class);
+
+    mvc.perform(get("/api/v1/liquidaciones/1")).andExpect(jsonPath("$.estado").value("ACTIVA"));
+    assertThat(cuenta("registro_anulacion")).isZero();
+  }
+
+  @Test
+  void dosAnulacionesSimultaneasDejanUnSoloRegistro() throws Exception {
+    confirmar(DORADO, "4500", huella(DORADO, "4500")).andExpect(status().isCreated());
+    var salida = new CountDownLatch(1);
+    Callable<Object> anulacion =
+        () -> {
+          salida.await();
+          return anular.anularLiquidacion(1L, "Error en el precio por kg", "Ana");
+        };
+
+    try (var hilos = Executors.newFixedThreadPool(2)) {
+      var futuros = new ArrayList<Future<Object>>();
+      futuros.add(hilos.submit(anulacion));
+      futuros.add(hilos.submit(anulacion));
+      salida.countDown();
+      int exitos = 0;
+      int conflictos = 0;
+      for (var futuro : futuros) {
+        try {
+          futuro.get();
+          exitos++;
+        } catch (ExecutionException e) {
+          assertThat(e.getCause()).isInstanceOf(LiquidacionYaAnuladaException.class);
+          var yaAnulada = (LiquidacionYaAnuladaException) e.getCause();
+          assertThat(yaAnulada.getRegistroAnulacion()).isNotNull();
+          conflictos++;
+        }
+      }
+      assertThat(exitos).isEqualTo(1);
+      assertThat(conflictos).isEqualTo(1);
+    }
+    assertThat(cuenta("registro_anulacion")).isEqualTo(1);
+  }
+
+  private ResultActions anular(long id, String motivo) throws Exception {
+    return mvc.perform(
+        put("/api/v1/liquidaciones/" + id + "/anulacion")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(
+                """
+                {"motivo":"%s","usuario":"Ana Ruiz"}
+                """
+                    .formatted(motivo)));
+  }
+
+  private java.util.Map<String, Object> liquidacion(long id) throws Exception {
+    return new java.util.HashMap<>(
+        JsonPath.read(
+            mvc.perform(get("/api/v1/liquidaciones/" + id))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            "$"));
   }
 
   private ResultActions previa(UUID lote, String precio) throws Exception {

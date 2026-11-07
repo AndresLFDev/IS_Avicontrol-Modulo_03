@@ -101,6 +101,26 @@ public class LiquidacionJpaAdapter implements LiquidacionRepository {
     return repositorio.findById(idLiquidacion).map(this::aDominio);
   }
 
+  @Override
+  public Optional<Liquidacion> bloquearParaAnular(long idLiquidacion) {
+    return repositorio.findByIdConBloqueo(idLiquidacion).map(this::aDominio);
+  }
+
+  @Override
+  public RegistroAnulacion anular(
+      long idLiquidacion, String motivo, String usuario, Instant fechaHora) {
+    var entidad = repositorio.getReferenceById(idLiquidacion);
+    entidad.estado = EstadoLiquidacion.ANULADA;
+    var registro = new RegistroAnulacionEntity();
+    registro.liquidacion = entidad;
+    registro.motivo = motivo;
+    registro.fechaHoraAnulacion = fechaHora;
+    registro.usuarioResponsable = usuario;
+    entidad.registroAnulacion = registro;
+    repositorio.flush();
+    return aRegistro(registro);
+  }
+
   private static SnapshotDatosOrigenEntity snapshot(
       LiquidacionEntity liquidacion, FuenteSincronizacion fuente, Instant fechaHoraSync) {
     var fila = new SnapshotDatosOrigenEntity();
@@ -124,7 +144,6 @@ public class LiquidacionJpaAdapter implements LiquidacionRepository {
             .param("idGalpon", e.idGalpon)
             .query((rs, i) -> new String[] {rs.getString(1), rs.getString(2)})
             .single();
-    var anulacion = e.registroAnulacion;
     return new Liquidacion(
         e.id,
         e.estado,
@@ -151,13 +170,11 @@ public class LiquidacionJpaAdapter implements LiquidacionRepository {
         e.usuarioResponsable,
         fechaSync(e, FuenteSincronizacion.MODULO_1),
         fechaSync(e, FuenteSincronizacion.MODULO_2),
-        anulacion == null
-            ? null
-            : new RegistroAnulacion(
-                anulacion.id,
-                anulacion.motivo,
-                anulacion.fechaHoraAnulacion,
-                anulacion.usuarioResponsable));
+        e.registroAnulacion == null ? null : aRegistro(e.registroAnulacion));
+  }
+
+  private static RegistroAnulacion aRegistro(RegistroAnulacionEntity e) {
+    return new RegistroAnulacion(e.id, e.motivo, e.fechaHoraAnulacion, e.usuarioResponsable);
   }
 
   private static long subtotal(LiquidacionEntity e, CategoriaCosto categoria) {

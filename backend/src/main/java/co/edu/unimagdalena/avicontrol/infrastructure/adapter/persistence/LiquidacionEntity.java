@@ -19,7 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-/** Tabla {@code liquidacion} (V3). Las partidas y el snapshot se guardan en cascada. */
+/** Tabla {@code liquidacion} (V3). Partidas, snapshot y anulación se guardan en cascada. */
 @Entity
 @Table(name = "liquidacion")
 class LiquidacionEntity {
@@ -75,7 +75,7 @@ class LiquidacionEntity {
   @Column(name = "usuario_responsable", nullable = false)
   String usuarioResponsable;
 
-  /** Bloqueo optimista para las anulaciones concurrentes (CU04). */
+  /** Control de concurrencia de JPA; la anulación además bloquea la fila (CU04). */
   @Version
   @Column(name = "version", nullable = false)
   long version;
@@ -86,6 +86,6 @@ class LiquidacionEntity {
   @OneToMany(mappedBy = "liquidacion", cascade = CascadeType.ALL)
   List<SnapshotDatosOrigenEntity> snapshots = new ArrayList<>();
 
-  @OneToOne(mappedBy = "liquidacion")
+  @OneToOne(mappedBy = "liquidacion", cascade = CascadeType.ALL)
   RegistroAnulacionEntity registroAnulacion;
 }

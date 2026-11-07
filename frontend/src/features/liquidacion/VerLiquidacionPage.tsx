@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { ApiError } from '../../shared/api/httpClient.ts'
 import { formatFechaHora } from '../../shared/format/formatFecha.ts'
+import AnularLiquidacion from './AnularLiquidacion.tsx'
 import { consultarLiquidacion } from './liquidacionApi.ts'
 import MatrizVentaFinal from './MatrizVentaFinal.tsx'
-import type { Liquidacion } from './types.ts'
+import type { Liquidacion, LoteParaLiquidar } from './types.ts'
 
 interface Respuesta {
   id: string
@@ -16,6 +17,9 @@ interface Respuesta {
 export default function VerLiquidacionPage() {
   const { idLiquidacion = '' } = useParams()
   const [respuesta, setRespuesta] = useState<Respuesta>()
+  const [recargas, setRecargas] = useState(0)
+  const [anulando, setAnulando] = useState(false)
+  const [aviso, setAviso] = useState<string>()
 
   useEffect(() => {
     let vigente = true
@@ -31,7 +35,7 @@ export default function VerLiquidacionPage() {
     return () => {
       vigente = false
     }
-  }, [idLiquidacion])
+  }, [idLiquidacion, recargas])
 
   if (respuesta?.id !== idLiquidacion) {
     return <p className="text-gray-600">Cargando liquidación…</p>
@@ -47,6 +51,30 @@ export default function VerLiquidacionPage() {
 
   const activa = liquidacion.estado === 'ACTIVA'
   const anulacion = liquidacion.registroAnulacion
+  const loteParaLiquidar: LoteParaLiquidar = {
+    nombreLote: liquidacion.nombreLote,
+    nombreGalpon: liquidacion.nombreGalpon,
+    siniestroTotal: liquidacion.siniestroTotal,
+  }
+
+  if (anulando) {
+    return (
+      <section className="mx-auto max-w-3xl space-y-4">
+        <h1 className="text-2xl font-bold">
+          {liquidacion.nombreGalpon} · Lote {liquidacion.nombreLote}
+        </h1>
+        <AnularLiquidacion
+          liquidacion={liquidacion}
+          onCancelar={() => setAnulando(false)}
+          onTerminar={(mensaje) => {
+            setAviso(mensaje)
+            setAnulando(false)
+            setRecargas((n) => n + 1)
+          }}
+        />
+      </section>
+    )
+  }
 
   return (
     <section className="mx-auto max-w-4xl space-y-4">
@@ -71,6 +99,12 @@ export default function VerLiquidacionPage() {
         )}
       </div>
 
+      {aviso && (
+        <p role="status" className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">
+          {aviso}
+        </p>
+      )}
+
       <MatrizVentaFinal matriz={liquidacion} />
 
       <p className="text-sm text-gray-600">
@@ -88,7 +122,7 @@ export default function VerLiquidacionPage() {
         </div>
       )}
 
-      {/* El desglose (CU05) y la anulación (CU04) llegan en sus propios planes */}
+      {/* El desglose llega con CU05 */}
       <div className="flex gap-3">
         {liquidacion.accionesDisponibles.includes('VER_DESGLOSE') && (
           <button
@@ -103,12 +137,20 @@ export default function VerLiquidacionPage() {
         {liquidacion.accionesDisponibles.includes('ANULAR') && (
           <button
             type="button"
-            disabled
-            title="Disponible con M3-CU04"
-            className="rounded-md bg-red-400 px-4 py-2 text-white disabled:opacity-40"
+            onClick={() => setAnulando(true)}
+            className="rounded-md bg-red-400 px-4 py-2 text-white"
           >
             Anular liquidación
           </button>
+        )}
+        {!activa && (
+          <Link
+            to={`/lotes/${liquidacion.idLote}/liquidacion`}
+            state={loteParaLiquidar}
+            className="rounded-md bg-gray-600 px-4 py-2 text-white"
+          >
+            Generar nueva liquidación
+          </Link>
         )}
       </div>
     </section>

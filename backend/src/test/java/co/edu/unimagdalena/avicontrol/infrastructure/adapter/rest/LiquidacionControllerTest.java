@@ -7,21 +7,26 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import co.edu.unimagdalena.avicontrol.domain.exception.LiquidacionNoEncontradaException;
+import co.edu.unimagdalena.avicontrol.domain.exception.LiquidacionYaAnuladaException;
 import co.edu.unimagdalena.avicontrol.domain.exception.LiquidacionYaExistenteException;
 import co.edu.unimagdalena.avicontrol.domain.exception.LoteNoLiquidableException;
 import co.edu.unimagdalena.avicontrol.domain.exception.VistaPreviaDesactualizadaException;
 import co.edu.unimagdalena.avicontrol.domain.model.CategoriaCosto;
 import co.edu.unimagdalena.avicontrol.domain.model.CausaNoLiquidable;
 import co.edu.unimagdalena.avicontrol.domain.model.PartidaPendiente;
+import co.edu.unimagdalena.avicontrol.domain.model.RegistroAnulacion;
 import co.edu.unimagdalena.avicontrol.domain.model.SubtotalesCategoria;
+import co.edu.unimagdalena.avicontrol.domain.port.in.AnularLiquidacionUseCase;
 import co.edu.unimagdalena.avicontrol.domain.port.in.ConsultarLiquidacionUseCase;
 import co.edu.unimagdalena.avicontrol.domain.port.in.GenerarLiquidacionUseCase;
 import co.edu.unimagdalena.avicontrol.domain.port.in.PreviewLiquidacionUseCase;
+import co.edu.unimagdalena.avicontrol.domain.port.in.dto.AnulacionDto;
 import co.edu.unimagdalena.avicontrol.domain.port.in.dto.GenerarLiquidacionCommand;
 import co.edu.unimagdalena.avicontrol.domain.port.in.dto.LiquidacionDto;
 import co.edu.unimagdalena.avicontrol.domain.port.in.dto.LiquidacionPreviaDto;
@@ -39,7 +44,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 
-/** Plan 003, T007, T010 y T013: contrato REST de las liquidaciones. */
+/** Plan 003, T007, T010, T013 y T016: contrato REST de las liquidaciones. */
 class LiquidacionControllerTest {
 
   private static final UUID ID_LOTE = UUID.fromString("b0000000-0000-0000-0000-000000000003");
@@ -48,6 +53,7 @@ class LiquidacionControllerTest {
   private PreviewLiquidacionUseCase vistaPrevia;
   private GenerarLiquidacionUseCase generar;
   private ConsultarLiquidacionUseCase consultar;
+  private AnularLiquidacionUseCase anular;
   private MockMvc mvc;
 
   @BeforeEach
@@ -55,10 +61,12 @@ class LiquidacionControllerTest {
     vistaPrevia = mock(PreviewLiquidacionUseCase.class);
     generar = mock(GenerarLiquidacionUseCase.class);
     consultar = mock(ConsultarLiquidacionUseCase.class);
+    anular = mock(AnularLiquidacionUseCase.class);
     var validador = new LocalValidatorFactoryBean();
     validador.afterPropertiesSet();
     mvc =
-        MockMvcBuilders.standaloneSetup(new LiquidacionController(vistaPrevia, generar, consultar))
+        MockMvcBuilders.standaloneSetup(
+                new LiquidacionController(vistaPrevia, generar, consultar, anular))
             .setControllerAdvice(new GlobalExceptionHandler(Clock.fixed(AHORA, ZoneOffset.UTC)))
             .setValidator(validador)
             .build();
@@ -221,6 +229,85 @@ class LiquidacionControllerTest {
         .andExpect(jsonPath("$.idLiquidacion").value(42))
         .andExpect(jsonPath("$.usuarioResponsable").value("Jorge"))
         .andExpect(jsonPath("$.fechaHoraGeneracion").value("2026-10-29T15:00:00Z"));
+  }
+
+  @Test
+  void anularResponde200ConElMotivoYElUsuarioRecortados() throws Exception {
+    var registro = new RegistroAnulacion(7L, "Error en el precio", AHORA, "Ana");
+    when(anular.anularLiquidacion(42L, "Error en el precio", "Ana"))
+        .thenReturn(new AnulacionDto(42L, "ANULADA", registro));
+
+    mvc.perform(
+            put("/api/v1/liquidaciones/42/anulacion")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {"motivo":"  Error en el precio  ","usuario":"  Ana  "}
+                    """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.idLiquidacion").value(42))
+        .andExpect(jsonPath("$.estado").value("ANULADA"))
+        .andExpect(jsonPath("$.registroAnulacion.idAnulacion").value(7))
+        .andExpect(jsonPath("$.registroAnulacion.motivo").value("Error en el precio"))
+        .andExpect(jsonPath("$.registroAnulacion.fechaHoraAnulacion").value("2026-10-29T15:00:00Z"))
+        .andExpect(jsonPath("$.registroAnulacion.usuarioResponsable").value("Ana"));
+  }
+
+  @Test
+  void motivoDeSoloEspaciosOCortoYUsuarioVacioResponden400() throws Exception {
+    for (var motivo : new String[] {"            ", "  corto  ", "x".repeat(501)}) {
+      mvc.perform(
+              put("/api/v1/liquidaciones/42/anulacion")
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(
+                      """
+                      {"motivo":"%s","usuario":" "}
+                      """
+                          .formatted(motivo)))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.type").value("https://avicontrol.edu.co/errors/validacion"))
+          .andExpect(jsonPath("$.errores[?(@.campo == 'motivo')]").isNotEmpty())
+          .andExpect(jsonPath("$.errores[?(@.campo == 'usuario')]").isNotEmpty());
+    }
+    verifyNoInteractions(anular);
+  }
+
+  @Test
+  void anularUnaYaAnuladaResponde409ConSuRegistro() throws Exception {
+    var registro = new RegistroAnulacion(7L, "Error en el precio", AHORA, "Ana");
+    when(anular.anularLiquidacion(42L, "Otro motivo cualquiera", "Luis"))
+        .thenThrow(new LiquidacionYaAnuladaException(42L, registro));
+
+    mvc.perform(
+            put("/api/v1/liquidaciones/42/anulacion")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {"motivo":"Otro motivo cualquiera","usuario":"Luis"}
+                    """))
+        .andExpect(status().isConflict())
+        .andExpect(
+            jsonPath("$.type").value("https://avicontrol.edu.co/errors/liquidacion-ya-anulada"))
+        .andExpect(jsonPath("$.detail").value("La Liquidación 42 ya fue anulada."))
+        .andExpect(jsonPath("$.registroAnulacion.motivo").value("Error en el precio"))
+        .andExpect(jsonPath("$.registroAnulacion.usuarioResponsable").value("Ana"));
+  }
+
+  @Test
+  void anularUnaInexistenteResponde404() throws Exception {
+    when(anular.anularLiquidacion(999L, "Error en el precio", "Ana"))
+        .thenThrow(new LiquidacionNoEncontradaException(999L));
+
+    mvc.perform(
+            put("/api/v1/liquidaciones/999/anulacion")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {"motivo":"Error en el precio","usuario":"Ana"}
+                    """))
+        .andExpect(status().isNotFound())
+        .andExpect(
+            jsonPath("$.type").value("https://avicontrol.edu.co/errors/liquidacion-no-encontrada"));
   }
 
   private static LiquidacionPreviaDto previa() {
