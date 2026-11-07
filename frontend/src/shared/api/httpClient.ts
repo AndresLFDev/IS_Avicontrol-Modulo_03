@@ -33,10 +33,19 @@ export class ApiError extends Error {
   }
 }
 
+/** Con VITE_USE_MOCKS=true responde el backend simulado; la compilación de producción no lo incluye. */
+async function enviar(url: string, init: RequestInit) {
+  if (import.meta.env.VITE_USE_MOCKS === 'true') {
+    const { mockFetch } = await import('../../mocks/mockFetch.ts')
+    return mockFetch(url, init)
+  }
+  return fetch(url, init)
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   let respuesta: Response
   try {
-    respuesta = await fetch(`${BASE_URL}${path}`, {
+    respuesta = await enviar(`${BASE_URL}${path}`, {
       method,
       headers: {
         Accept: 'application/json, application/problem+json',
