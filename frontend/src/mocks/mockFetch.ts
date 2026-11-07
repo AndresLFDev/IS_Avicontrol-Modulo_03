@@ -10,7 +10,9 @@ import type {
 } from '../features/liquidacion/types.ts'
 import type { EtapaLote, LotePage, LoteResumen } from '../features/lotes/types.ts'
 import type { ErrorCampo } from '../shared/api/httpClient.ts'
+import type { HistorialItem, HistorialPage } from '../features/reportes/types.ts'
 import { LOTES, type LoteMock, type PartidaMock } from './datos.ts'
+import { LIQUIDACIONES_HISTORICAS } from './historial.ts'
 
 const LATENCIA_MS = 150
 const CLAVE_ESTADO = 'avicontrol-mock'
@@ -349,7 +351,7 @@ function consultar(id: string): Liquidacion {
   if (!/^\d+$/.test(id)) {
     throw validacion([{ campo: 'id', mensaje: `El valor '${id}' no es válido.` }])
   }
-  const liquidacion = leerEstado().liquidaciones.find((l) => l.idLiquidacion === Number(id))
+  const liquidacion = todasLasLiquidaciones().find((l) => l.idLiquidacion === Number(id))
   if (!liquidacion) {
     throw problema(
       404,
@@ -359,6 +361,91 @@ function consultar(id: string): Liquidacion {
     )
   }
   return liquidacion
+}
+
+function todasLasLiquidaciones() {
+  return [...LIQUIDACIONES_HISTORICAS, ...leerEstado().liquidaciones]
+}
+
+/** Día calendario de un instante en Colombia, como compara el backend (plan 004). */
+const FECHA_COLOMBIA = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' })
+
+function aFilaHistorial(l: Liquidacion): HistorialItem {
+  return {
+    idLiquidacion: l.idLiquidacion,
+    fechaHoraGeneracion: l.fechaHoraGeneracion,
+    idGalpon: l.idGalpon,
+    nombreGalpon: l.nombreGalpon,
+    idLote: l.idLote,
+    nombreLote: l.nombreLote,
+    ventaBrutaCop: l.ventaBrutaCop,
+    porcentajeMortalidad: l.porcentajeMortalidad,
+    costosOperativosCop: l.costosOperativosCop,
+    utilidadNetaCop: l.utilidadNetaCop,
+    estado: l.estado,
+  }
+}
+
+function consultarHistorial(parametros: URLSearchParams): HistorialPage {
+  const termino = parametros.get('search')?.trim().toLowerCase() ?? ''
+  const desde = parametros.get('desde') ?? ''
+  const hasta = parametros.get('hasta') ?? ''
+  const page = Number(parametros.get('page') ?? 0)
+  const size = Number(parametros.get('size') ?? 10)
+
+  const errores: ErrorCampo[] = []
+  if (termino.length > 100) {
+    errores.push({ campo: 'search', mensaje: 'La búsqueda admite máximo 100 caracteres.' })
+  }
+  if (!Number.isInteger(page) || page < 0) {
+    errores.push({ campo: 'page', mensaje: 'La página debe ser mayor o igual a 0.' })
+  }
+  if (!Number.isInteger(size) || size < 1 || size > 50) {
+    errores.push({ campo: 'size', mensaje: 'El tamaño de página debe estar entre 1 y 50.' })
+  }
+  if (errores.length > 0) throw validacion(errores)
+  if (desde && hasta && desde > hasta) {
+    throw problema(
+      400,
+      'rango-fechas-invalido',
+      'Rango de fechas inválido',
+      `La fecha inicial (${desde}) debe ser menor o igual a la fecha final (${hasta}).`,
+    )
+  }
+
+  const todas = todasLasLiquidaciones()
+  const filtradas = todas
+    .filter(
+      (l) =>
+        !termino ||
+        l.nombreLote.toLowerCase().includes(termino) ||
+        l.nombreGalpon.toLowerCase().includes(termino) ||
+        l.idLote === termino ||
+        l.idGalpon === termino,
+    )
+    .filter((l) => {
+      const fecha = FECHA_COLOMBIA.format(new Date(l.fechaHoraGeneracion))
+      return (!desde || fecha >= desde) && (!hasta || fecha <= hasta)
+    })
+    .toSorted((a, b) => b.fechaHoraGeneracion.localeCompare(a.fechaHoraGeneracion))
+
+  const content = filtradas.slice(page * size, (page + 1) * size).map(aFilaHistorial)
+  let mensaje: string | null = null
+  if (content.length === 0) {
+    mensaje =
+      todas.length === 0 && !termino && !desde && !hasta
+        ? 'No hay liquidaciones registradas aún'
+        : 'No se encontraron liquidaciones para los criterios de búsqueda aplicados'
+  }
+
+  return {
+    content,
+    page,
+    size,
+    totalElements: filtradas.length,
+    totalPages: Math.ceil(filtradas.length / size),
+    mensaje,
+  }
 }
 
 export async function mockFetch(url: string, init: RequestInit = {}): Promise<Response> {
@@ -374,6 +461,9 @@ export async function mockFetch(url: string, init: RequestInit = {}): Promise<Re
     }
     if (metodo === 'GET' && pathname === '/api/v1/sincronizacion/estado') {
       return json(200, listarLotes(searchParams).sincronizacion)
+    }
+    if (metodo === 'GET' && pathname === '/api/v1/liquidaciones') {
+      return json(200, consultarHistorial(searchParams))
     }
     if (metodo === 'POST' && pathname === '/api/v1/liquidaciones/previa') {
       return json(200, vistaPrevia(cuerpo as VistaPreviaRequest))

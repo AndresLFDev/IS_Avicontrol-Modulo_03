@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router'
+import { Link, useLocation, useParams } from 'react-router'
 import { ApiError } from '../../shared/api/httpClient.ts'
 import { formatFechaHora } from '../../shared/format/formatFecha.ts'
 import AnularLiquidacion from './AnularLiquidacion.tsx'
@@ -16,6 +16,8 @@ interface Respuesta {
 /** Vista de una Liquidación existente, ACTIVA o ANULADA (M3-CU03.FR-014). */
 export default function VerLiquidacionPage() {
   const { idLiquidacion = '' } = useParams()
+  // El historial envía su ruta con filtros para que el enlace de regreso los conserve
+  const volverA = (useLocation().state as { volverA?: string } | null)?.volverA
   const [respuesta, setRespuesta] = useState<Respuesta>()
   const [recargas, setRecargas] = useState(0)
   const [anulando, setAnulando] = useState(false)
@@ -78,8 +80,8 @@ export default function VerLiquidacionPage() {
 
   return (
     <section className="mx-auto max-w-4xl space-y-4">
-      <Link to="/" className="text-sm text-primario underline">
-        ← Volver a la lista de lotes
+      <Link to={volverA ?? '/'} className="text-sm text-primario underline">
+        ← Volver {volverA ? 'al historial' : 'a la lista de lotes'}
       </Link>
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-bold">

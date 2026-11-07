@@ -2,6 +2,7 @@ import { createBrowserRouter, type RouteObject } from 'react-router'
 import GenerarLiquidacionPage from '../features/liquidacion/GenerarLiquidacionPage.tsx'
 import VerLiquidacionPage from '../features/liquidacion/VerLiquidacionPage.tsx'
 import ListaLotesPage from '../features/lotes/ListaLotesPage.tsx'
+import HistorialPage from '../features/reportes/HistorialPage.tsx'
 import Layout from './Layout.tsx'
 import NoEncontradoPage from './NoEncontradoPage.tsx'
 
@@ -14,6 +15,7 @@ export const routes: RouteObject[] = [
       { index: true, element: <ListaLotesPage /> },
       { path: 'lotes/:idLote/liquidacion', element: <GenerarLiquidacionPage /> },
       { path: 'liquidaciones/:idLiquidacion', element: <VerLiquidacionPage /> },
+      { path: 'historial', element: <HistorialPage /> },
       { path: '*', element: <NoEncontradoPage /> },
     ],
   },

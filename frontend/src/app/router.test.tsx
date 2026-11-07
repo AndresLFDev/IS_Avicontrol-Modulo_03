@@ -24,6 +24,12 @@ describe('router', () => {
     expect(screen.getByRole('heading', { name: 'Lista de Lotes' })).toBeInTheDocument()
   })
 
+  it('muestra el historial y lo marca en el menú', () => {
+    renderEn('/historial')
+    expect(screen.getByRole('heading', { name: 'Historial de Liquidaciones' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Historial' })).toHaveAttribute('aria-current', 'page')
+  })
+
   it('muestra la página de no encontrado en una ruta desconocida', () => {
     renderEn('/no-existe')
     expect(screen.getByRole('heading', { name: 'Página no encontrada' })).toBeInTheDocument()

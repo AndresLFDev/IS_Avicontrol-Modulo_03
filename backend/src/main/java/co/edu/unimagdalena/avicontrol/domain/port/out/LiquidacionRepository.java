@@ -5,6 +5,8 @@ import co.edu.unimagdalena.avicontrol.domain.model.CalculoLiquidacion;
 import co.edu.unimagdalena.avicontrol.domain.model.DatosLiquidacion;
 import co.edu.unimagdalena.avicontrol.domain.model.Liquidacion;
 import co.edu.unimagdalena.avicontrol.domain.model.RegistroAnulacion;
+import co.edu.unimagdalena.avicontrol.domain.port.in.dto.HistorialItemDto;
+import co.edu.unimagdalena.avicontrol.domain.shared.Pagina;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -33,4 +35,17 @@ public interface LiquidacionRepository {
 
   /** Marca {@code ANULADA} la Liquidación y crea su registro de auditoría. */
   RegistroAnulacion anular(long idLiquidacion, String motivo, String usuario, Instant fechaHora);
+
+  /**
+   * Historial de Liquidaciones {@code ACTIVA} y {@code ANULADA}, de la más reciente a la más
+   * antigua (M3-CU06).
+   *
+   * @param search texto ya normalizado: nombre o UUID de galpón o de lote ({@code null} = todas)
+   * @param desde instante inicial inclusivo ({@code null} = sin límite)
+   * @param hastaExclusivo instante final exclusivo ({@code null} = sin límite)
+   * @param page índice de página (0-based)
+   * @param size tamaño de página
+   */
+  Pagina<HistorialItemDto> buscarHistorial(
+      String search, Instant desde, Instant hastaExclusivo, int page, int size);
 }
