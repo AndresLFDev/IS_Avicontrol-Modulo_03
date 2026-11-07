@@ -124,17 +124,15 @@ export default function VerLiquidacionPage() {
         </div>
       )}
 
-      {/* El desglose llega con CU05 */}
       <div className="flex gap-3">
         {liquidacion.accionesDisponibles.includes('VER_DESGLOSE') && (
-          <button
-            type="button"
-            disabled
-            title="Disponible con M3-CU05"
-            className="rounded-md bg-black px-4 py-2 text-white disabled:opacity-40"
+          <Link
+            to={`/liquidaciones/${liquidacion.idLiquidacion}/desglose`}
+            state={{ volverA }}
+            className="rounded-md bg-black px-4 py-2 text-white"
           >
             Ver desglose
-          </button>
+          </Link>
         )}
         {liquidacion.accionesDisponibles.includes('ANULAR') && (
           <button

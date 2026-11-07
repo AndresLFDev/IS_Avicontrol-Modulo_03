@@ -3,6 +3,7 @@ import GenerarLiquidacionPage from '../features/liquidacion/GenerarLiquidacionPa
 import VerLiquidacionPage from '../features/liquidacion/VerLiquidacionPage.tsx'
 import ListaLotesPage from '../features/lotes/ListaLotesPage.tsx'
 import HistorialPage from '../features/reportes/HistorialPage.tsx'
+import VerDesglosePage from '../features/reportes/VerDesglosePage.tsx'
 import Layout from './Layout.tsx'
 import NoEncontradoPage from './NoEncontradoPage.tsx'
 
@@ -15,6 +16,7 @@ export const routes: RouteObject[] = [
       { index: true, element: <ListaLotesPage /> },
       { path: 'lotes/:idLote/liquidacion', element: <GenerarLiquidacionPage /> },
       { path: 'liquidaciones/:idLiquidacion', element: <VerLiquidacionPage /> },
+      { path: 'liquidaciones/:idLiquidacion/desglose', element: <VerDesglosePage /> },
       { path: 'historial', element: <HistorialPage /> },
       { path: '*', element: <NoEncontradoPage /> },
     ],

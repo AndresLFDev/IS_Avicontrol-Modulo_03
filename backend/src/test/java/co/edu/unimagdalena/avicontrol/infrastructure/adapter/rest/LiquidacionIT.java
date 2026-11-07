@@ -19,6 +19,7 @@ import co.edu.unimagdalena.avicontrol.domain.port.in.GenerarLiquidacionUseCase;
 import co.edu.unimagdalena.avicontrol.domain.port.in.PreviewLiquidacionUseCase;
 import co.edu.unimagdalena.avicontrol.domain.port.in.dto.GenerarLiquidacionCommand;
 import com.jayway.jsonpath.JsonPath;
+import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.UUID;
@@ -27,6 +28,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,9 +42,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
 /**
- * Plan 003, T010 y T016: M3-CU03 y M3-CU04 de punta a punta contra PostgreSQL real, con los datos
- * del Caso Dorado (CU03 esc. 1), el siniestro total y la partida sin precio del seed de
- * demostración.
+ * Planes 003 (T010, T016) y 004 (T008, T011): M3-CU03, CU04 y CU05 de punta a punta contra
+ * PostgreSQL real, con los datos del Caso Dorado (CU03 esc. 1), el siniestro total y la partida sin
+ * precio del seed de demostración.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -352,6 +354,102 @@ class LiquidacionIT {
       assertThat(conflictos).isEqualTo(1);
     }
     assertThat(cuenta("registro_anulacion")).isEqualTo(1);
+  }
+
+  @Test
+  void elDesgloseCuadraConLaLiquidacionYTraeLaTrazabilidad() throws Exception {
+    long id = generada(DORADO, "4500");
+
+    mvc.perform(get("/api/v1/liquidaciones/" + id + "/desglose"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.estado").value("ACTIVA"))
+        .andExpect(jsonPath("$.nombreLote").value("L-2026-03"))
+        .andExpect(jsonPath("$.ingresos.ventaBrutaCop").value(107_100_000))
+        .andExpect(jsonPath("$.categorias.length()").value(3))
+        .andExpect(jsonPath("$.categorias[0].categoria").value("ALIMENTO"))
+        .andExpect(jsonPath("$.categorias[0].subtotalCop").value(64_800_000))
+        .andExpect(jsonPath("$.categorias[0].partidas[0].concepto").value("Pre-inicio"))
+        .andExpect(jsonPath("$.categorias[0].partidas[2].concepto").value("Engorde"))
+        .andExpect(jsonPath("$.categorias[1].subtotalCop").value(2_200_000))
+        .andExpect(jsonPath("$.categorias[1].partidas[0].referenciaOrigen").value("REC-090"))
+        .andExpect(jsonPath("$.categorias[2].subtotalCop").value(18_000_000))
+        .andExpect(jsonPath("$.categorias[2].partidas[0].fuenteOrigen").value("MODULO_1"))
+        .andExpect(
+            jsonPath("$.categorias[2].partidas[0].referenciaOrigen").value(DORADO.toString()))
+        .andExpect(jsonPath("$.costosOperativosCop").value(85_000_000))
+        .andExpect(jsonPath("$.exportacionPermitida").value(true));
+  }
+
+  @Test
+  void elExcelTraeLosMismosValoresDeLaPantalla() throws Exception {
+    long id = generada(DORADO, "4500");
+
+    byte[] archivo =
+        mvc.perform(get("/api/v1/liquidaciones/" + id + "/desglose/excel"))
+            .andExpect(status().isOk())
+            .andExpect(
+                header()
+                    .string(
+                        "Content-Disposition",
+                        "attachment; filename=\"Liquidacion_Lote_" + id + ".xlsx\""))
+            .andReturn()
+            .getResponse()
+            .getContentAsByteArray();
+
+    try (var libro = new XSSFWorkbook(new ByteArrayInputStream(archivo))) {
+      var hoja = libro.getSheetAt(0);
+      var ultima = hoja.getRow(hoja.getLastRowNum());
+      assertThat(ultima.getCell(0).getStringCellValue()).isEqualTo("TOTAL COSTOS OPERATIVOS");
+      assertThat(ultima.getCell(5).getNumericCellValue()).isEqualTo(85_000_000);
+    }
+  }
+
+  @Test
+  void elDesgloseDeUnSiniestroTotalNoTieneVentaPeroSeExporta() throws Exception {
+    long id = generada(SINIESTRO, "null");
+
+    mvc.perform(get("/api/v1/liquidaciones/" + id + "/desglose"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.siniestroTotal").value(true))
+        .andExpect(jsonPath("$.ingresos.ventaBrutaCop").value(0))
+        .andExpect(jsonPath("$.ingresos.precioKgCop").doesNotExist())
+        .andExpect(jsonPath("$.categorias[0].subtotalCop").value(21_000_000));
+    mvc.perform(get("/api/v1/liquidaciones/" + id + "/desglose/excel")).andExpect(status().isOk());
+  }
+
+  @Test
+  void unaAnuladaMuestraSuRegistroPeroNoSeExporta() throws Exception {
+    long id = generada(DORADO, "4500");
+    anular(id, "Error en el precio por kg").andExpect(status().isOk());
+
+    mvc.perform(get("/api/v1/liquidaciones/" + id + "/desglose"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.estado").value("ANULADA"))
+        .andExpect(jsonPath("$.registroAnulacion.motivo").value("Error en el precio por kg"))
+        .andExpect(jsonPath("$.registroAnulacion.usuarioResponsable").value("Ana Ruiz"))
+        .andExpect(jsonPath("$.exportacionPermitida").value(false));
+    mvc.perform(get("/api/v1/liquidaciones/" + id + "/desglose/excel"))
+        .andExpect(status().isConflict())
+        .andExpect(
+            jsonPath("$.type").value("https://avicontrol.edu.co/errors/exportacion-no-permitida"));
+  }
+
+  @Test
+  void elDesgloseDeUnaInexistenteResponde404() throws Exception {
+    mvc.perform(get("/api/v1/liquidaciones/999/desglose")).andExpect(status().isNotFound());
+    mvc.perform(get("/api/v1/liquidaciones/999/desglose/excel")).andExpect(status().isNotFound());
+  }
+
+  private long generada(UUID lote, String precio) throws Exception {
+    Number id =
+        JsonPath.read(
+            confirmar(lote, precio, huella(lote, precio))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            "$.idLiquidacion");
+    return id.longValue();
   }
 
   private ResultActions anular(long id, String motivo) throws Exception {
