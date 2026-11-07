@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router'
+import { Outlet, useNavigate } from 'react-router'
 import { formatFechaHora } from '../../shared/format/formatFecha.ts'
 import LotesTable from './LotesTable.tsx'
 import { ETIQUETA_ETAPA, type EstadoFuente, type EtapaLote } from './types.ts'
@@ -101,7 +101,7 @@ export default function ListaLotesPage() {
           <LotesTable
             lotes={datos.content}
             onGenerar={(lote) =>
-              // El estado evita pedir de nuevo el lote en la captura de CU03
+              // El estado evita pedir de nuevo el lote en la ventana de CU03
               navigate(`/lotes/${lote.idLote}/liquidacion`, {
                 state: {
                   nombreLote: lote.nombreLote,
@@ -141,6 +141,7 @@ export default function ListaLotesPage() {
       )}
 
       {vacia && <p className="mt-10 text-center text-gray-600">{datos.mensaje}</p>}
+      <Outlet />
     </section>
   )
 }

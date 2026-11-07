@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { ApiError, type ErrorCampo } from '../../shared/api/httpClient.ts'
+import Modal from '../../shared/ui/Modal.tsx'
 import { anularLiquidacion } from './liquidacionApi.ts'
 import type { Liquidacion } from './types.ts'
 
@@ -15,7 +16,7 @@ interface Props {
   onTerminar: (aviso?: string) => void
 }
 
-/** Anular Liquidación en dos pasos: captura y confirmación (M3-CU04.FR-003 y FR-004). */
+/** Ventana de anulación en dos pasos: captura y confirmación (M3-CU04.FR-003 y FR-004). */
 export default function AnularLiquidacion({ liquidacion, onCancelar, onTerminar }: Props) {
   const [paso, setPaso] = useState<'captura' | 'confirmacion'>('captura')
   const [motivo, setMotivo] = useState('')
@@ -76,67 +77,65 @@ export default function AnularLiquidacion({ liquidacion, onCancelar, onTerminar 
 
   if (paso === 'captura') {
     return (
-      <form onSubmit={continuar} className="space-y-4 rounded-lg bg-white p-5 shadow-sm">
-        <div>
-          <h2 className="font-bold">Anular liquidación</h2>
+      <Modal titulo="Anular liquidación" onCerrar={onCancelar}>
+        <form onSubmit={continuar} className="space-y-4">
           <p className="text-sm text-gray-600">
             Escribe por qué se anula. Quedará registrado con tu usuario, la fecha y la hora.
           </p>
-        </div>
-        {alerta}
-        <div>
-          <label htmlFor="motivo" className="block text-sm font-medium">
-            Motivo de anulación
-          </label>
-          <textarea
-            id="motivo"
-            rows={4}
-            value={motivo}
-            maxLength={MOTIVO_MAX}
-            onChange={(e) => setMotivo(e.target.value)}
-            className={`mt-1 w-full rounded-md border px-3 py-2 ${
-              errorMotivo ? 'border-error' : 'border-gray-300'
-            }`}
-          />
-          <div className="flex justify-between gap-3 text-xs">
-            <span className="text-error">{errorMotivo}</span>
-            <span className="text-gray-500">
-              {largoMotivo} / {MOTIVO_MAX} · mínimo {MOTIVO_MIN}
-            </span>
+          {alerta}
+          <div>
+            <label htmlFor="motivo" className="block text-sm font-medium">
+              Motivo de anulación
+            </label>
+            <textarea
+              id="motivo"
+              rows={4}
+              value={motivo}
+              maxLength={MOTIVO_MAX}
+              onChange={(e) => setMotivo(e.target.value)}
+              className={`mt-1 w-full rounded-md border px-3 py-2 ${
+                errorMotivo ? 'border-error' : 'border-gray-300'
+              }`}
+            />
+            <div className="flex justify-between gap-3 text-xs">
+              <span className="text-error">{errorMotivo}</span>
+              <span className="text-gray-500">
+                {largoMotivo} / {MOTIVO_MAX} · mínimo {MOTIVO_MIN}
+              </span>
+            </div>
           </div>
-        </div>
-        <div>
-          <label htmlFor="usuario" className="block text-sm font-medium">
-            Usuario responsable
-          </label>
-          <input
-            id="usuario"
-            value={usuario}
-            maxLength={100}
-            onChange={(e) => setUsuario(e.target.value)}
-            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
-          />
-          {errorUsuario && <p className="mt-1 text-sm text-error">{errorUsuario}</p>}
-        </div>
-        <div className="flex gap-3">
-          <button type="submit" className="rounded-md bg-red-400 px-4 py-2 text-white">
-            Continuar
-          </button>
-          <button
-            type="button"
-            onClick={onCancelar}
-            className="rounded-md bg-black px-4 py-2 text-white"
-          >
-            Cancelar
-          </button>
-        </div>
-      </form>
+          <div>
+            <label htmlFor="usuario" className="block text-sm font-medium">
+              Usuario responsable
+            </label>
+            <input
+              id="usuario"
+              value={usuario}
+              maxLength={100}
+              onChange={(e) => setUsuario(e.target.value)}
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
+            />
+            {errorUsuario && <p className="mt-1 text-sm text-error">{errorUsuario}</p>}
+          </div>
+          <div className="flex gap-3">
+            <button type="submit" className="rounded-md bg-red-400 px-4 py-2 text-white">
+              Continuar
+            </button>
+            <button
+              type="button"
+              onClick={onCancelar}
+              className="rounded-md bg-black px-4 py-2 text-white"
+            >
+              Cancelar
+            </button>
+          </div>
+        </form>
+      </Modal>
     )
   }
 
   return (
-    <div className="space-y-4 rounded-lg bg-white p-5 shadow-sm">
-      <h2 className="text-xl font-bold">¿Anular la liquidación de este lote?</h2>
+    <Modal titulo="¿Anular la liquidación de este lote?" bloqueado={enviando} onCerrar={onCancelar}>
       <p className="font-medium">
         Vas a anular la liquidación del Lote {liquidacion.nombreLote} del {liquidacion.nombreGalpon}
         . La liquidación quedará en estado Anulada y el lote podrá liquidarse de nuevo.
@@ -164,6 +163,6 @@ export default function AnularLiquidacion({ liquidacion, onCancelar, onTerminar 
           Cancelar
         </button>
       </div>
-    </div>
+    </Modal>
   )
 }

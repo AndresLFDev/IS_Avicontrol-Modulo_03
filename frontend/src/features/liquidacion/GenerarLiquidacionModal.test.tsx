@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router'
-import GenerarLiquidacionPage from './GenerarLiquidacionPage.tsx'
+import GenerarLiquidacionModal from './GenerarLiquidacionModal.tsx'
 import type { LiquidacionPrevia, LoteParaLiquidar } from './types.ts'
 
 const ID_LOTE = 'b0000000-0000-0000-0000-000000000003'
@@ -57,7 +57,8 @@ function renderPagina(
 ) {
   const router = createMemoryRouter(
     [
-      { path: '/lotes/:idLote/liquidacion', element: <GenerarLiquidacionPage /> },
+      { path: '/', element: <p>Lista de lotes</p> },
+      { path: '/lotes/:idLote/liquidacion', element: <GenerarLiquidacionModal /> },
       { path: '/liquidaciones/:idLiquidacion', element: <p>Liquidación generada</p> },
     ],
     { initialEntries: [{ pathname: `/lotes/${ID_LOTE}/liquidacion`, state: lote }] },
@@ -65,7 +66,7 @@ function renderPagina(
   render(<RouterProvider router={router} />)
 }
 
-describe('GenerarLiquidacionPage', () => {
+describe('GenerarLiquidacionModal', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', fetchMock)
   })
@@ -73,6 +74,15 @@ describe('GenerarLiquidacionPage', () => {
   afterEach(() => {
     fetchMock.mockReset()
     vi.unstubAllGlobals()
+  })
+
+  it('al cerrar la ventana vuelve a la lista sin generar nada', async () => {
+    renderPagina()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cerrar' }))
+
+    expect(await screen.findByText('Lista de lotes')).toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('pasa de la captura a la vista previa y genera la liquidación', async () => {

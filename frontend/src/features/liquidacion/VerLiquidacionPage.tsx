@@ -59,25 +59,6 @@ export default function VerLiquidacionPage() {
     siniestroTotal: liquidacion.siniestroTotal,
   }
 
-  if (anulando) {
-    return (
-      <section className="mx-auto max-w-3xl space-y-4">
-        <h1 className="text-2xl font-bold">
-          {liquidacion.nombreGalpon} · Lote {liquidacion.nombreLote}
-        </h1>
-        <AnularLiquidacion
-          liquidacion={liquidacion}
-          onCancelar={() => setAnulando(false)}
-          onTerminar={(mensaje) => {
-            setAviso(mensaje)
-            setAnulando(false)
-            setRecargas((n) => n + 1)
-          }}
-        />
-      </section>
-    )
-  }
-
   return (
     <section className="mx-auto max-w-4xl space-y-4">
       <Link to={volverA ?? '/'} className="text-sm text-primario underline">
@@ -153,6 +134,18 @@ export default function VerLiquidacionPage() {
           </Link>
         )}
       </div>
+
+      {anulando && (
+        <AnularLiquidacion
+          liquidacion={liquidacion}
+          onCancelar={() => setAnulando(false)}
+          onTerminar={(mensaje) => {
+            setAviso(mensaje)
+            setAnulando(false)
+            setRecargas((n) => n + 1)
+          }}
+        />
+      )}
     </section>
   )
 }

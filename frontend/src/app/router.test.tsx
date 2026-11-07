@@ -30,6 +30,12 @@ describe('router', () => {
     expect(screen.getByRole('link', { name: 'Historial' })).toHaveAttribute('aria-current', 'page')
   })
 
+  it('abre generar liquidación como ventana sobre la lista de lotes', () => {
+    renderEn('/lotes/b0000000-0000-0000-0000-000000000003/liquidacion')
+    expect(screen.getByRole('dialog', { name: 'Generar liquidación' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Lista de Lotes' })).toBeInTheDocument()
+  })
+
   it('muestra la página de no encontrado en una ruta desconocida', () => {
     renderEn('/no-existe')
     expect(screen.getByRole('heading', { name: 'Página no encontrada' })).toBeInTheDocument()
