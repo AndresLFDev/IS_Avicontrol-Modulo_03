@@ -9,6 +9,10 @@ import type {
   PartidaPendiente,
   ProblemaLiquidacion,
 } from './types.ts'
+import { useLoteParaLiquidar } from './useLoteParaLiquidar.ts'
+
+const LOTE_NO_DISPONIBLE =
+  'Este lote no está disponible para liquidar: ya tiene una liquidación activa o no existe.'
 
 interface ErrorPantalla {
   mensaje: string
@@ -40,7 +44,8 @@ function ErrorCampoTexto({ error, campo }: { error: ErrorPantalla | null; campo:
 /** P2 — Generar Liquidación en dos pasos: captura y vista previa (M3-CU03.FR-015). */
 export default function GenerarLiquidacionPage() {
   const { idLote = '' } = useParams()
-  const lote = useLocation().state as LoteParaLiquidar | null
+  const desdeLista = useLocation().state as LoteParaLiquidar | null
+  const { lote, cargando, error: errorLote } = useLoteParaLiquidar(idLote, desdeLista)
   const navigate = useNavigate()
   const siniestroTotal = lote?.siniestroTotal ?? false
 
@@ -101,15 +106,23 @@ export default function GenerarLiquidacionPage() {
     }
   }
 
-  const titulo = lote ? `${lote.nombreGalpon} · Lote ${lote.nombreLote}` : `Lote ${idLote}`
-
   return (
     <section className="mx-auto max-w-4xl space-y-4">
       <Link to="/" className="text-sm text-primario underline">
         ← Volver a la lista de lotes
       </Link>
       <h1 className="text-2xl font-bold">Generar liquidación</h1>
-      <p className="font-semibold">{titulo}</p>
+      {lote && (
+        <p className="font-semibold">
+          {lote.nombreGalpon} · Lote {lote.nombreLote}
+        </p>
+      )}
+      {cargando && <p className="text-gray-600">Cargando lote…</p>}
+      {!cargando && !lote && (
+        <p role="alert" className="text-error">
+          {errorLote ?? LOTE_NO_DISPONIBLE}
+        </p>
+      )}
 
       {error && (
         <div role="alert" className="rounded-md border border-error bg-red-50 p-3 text-error">
@@ -135,7 +148,7 @@ export default function GenerarLiquidacionPage() {
         </div>
       )}
 
-      {paso === 'captura' && (
+      {paso === 'captura' && lote && (
         <form onSubmit={siguiente} className="space-y-4 rounded-lg bg-white p-5 shadow-sm">
           {siniestroTotal ? (
             <p className="rounded-md bg-red-100 p-3 text-sm text-error">

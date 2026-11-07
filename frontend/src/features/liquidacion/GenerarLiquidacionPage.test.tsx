@@ -49,7 +49,7 @@ function cuerpoEnviado(llamada: number) {
 const fetchMock = vi.fn<typeof fetch>()
 
 function renderPagina(
-  lote: LoteParaLiquidar = {
+  lote: LoteParaLiquidar | null = {
     nombreLote: 'L-2026-03',
     nombreGalpon: 'Galpón Este',
     siniestroTotal: false,
@@ -120,6 +120,41 @@ describe('GenerarLiquidacionPage', () => {
 
     await screen.findByText('Vista previa · sin generar')
     expect(cuerpoEnviado(0).precioKgCop).toBeNull()
+  })
+
+  describe('al abrir la URL directamente', () => {
+    const FILA_SINIESTRO = {
+      idLote: ID_LOTE,
+      nombreLote: 'L-2026-04',
+      nombreGalpon: 'Galpón Oeste',
+      siniestroTotal: true,
+    }
+
+    it('consulta el lote por UUID y no pide precio si es siniestro total', async () => {
+      fetchMock.mockResolvedValueOnce(json(200, { content: [FILA_SINIESTRO] }))
+      renderPagina(null)
+
+      expect(screen.getByText('Cargando lote…')).toBeInTheDocument()
+      expect(await screen.findByText('Galpón Oeste · Lote L-2026-04')).toBeInTheDocument()
+      expect(fetchMock.mock.calls[0][0]).toContain(`search=${ID_LOTE}`)
+      expect(screen.queryByLabelText('Precio por kg (COP)')).not.toBeInTheDocument()
+    })
+
+    it('avisa si el lote no se puede liquidar y no muestra el formulario', async () => {
+      fetchMock.mockResolvedValueOnce(json(200, { content: [] }))
+      renderPagina(null)
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('no está disponible')
+      expect(screen.queryByLabelText('Usuario responsable')).not.toBeInTheDocument()
+    })
+
+    it('muestra el error si la consulta falla', async () => {
+      fetchMock.mockRejectedValueOnce(new TypeError('sin red'))
+      renderPagina(null)
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo contactar')
+      expect(screen.queryByLabelText('Usuario responsable')).not.toBeInTheDocument()
+    })
   })
 
   it('muestra el error de cada campo', async () => {

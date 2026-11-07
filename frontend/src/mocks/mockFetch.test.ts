@@ -28,6 +28,13 @@ describe('mockFetch', () => {
     expect(pagina.content[0].nombreLote).toBe('L-2026-03')
   })
 
+  it('encuentra un lote por su UUID exacto', async () => {
+    const pagina = await (await mockFetch(`${BASE}/lotes?search=${LOTE_SINIESTRO}`)).json()
+
+    expect(pagina.content).toHaveLength(1)
+    expect(pagina.content[0].siniestroTotal).toBe(true)
+  })
+
   it('deshabilita la acción si el lote por liquidar no tiene resultado de M2', async () => {
     const pagina = await (await mockFetch(`${BASE}/lotes?search=L-2026-08`)).json()
 

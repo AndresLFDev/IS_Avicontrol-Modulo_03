@@ -5,8 +5,17 @@ import type {
   GenerarLiquidacionRequest,
   Liquidacion,
   LiquidacionPrevia,
+  LoteParaLiquidar,
   VistaPreviaRequest,
 } from './types.ts'
+
+/** Busca por UUID exacto en la lista de lotes; null si no se lista (ya liquidado o inexistente). */
+export async function buscarLoteParaLiquidar(idLote: string): Promise<LoteParaLiquidar | null> {
+  const { content } = await httpClient.get<{
+    content: (LoteParaLiquidar & { idLote: string })[]
+  }>(`/api/v1/lotes?${new URLSearchParams({ search: idLote })}`)
+  return content.find((lote) => lote.idLote === idLote) ?? null
+}
 
 /** Paso 2 de CU03: calcula la vista previa sin persistir nada. */
 export function calcularVistaPrevia(request: VistaPreviaRequest) {
