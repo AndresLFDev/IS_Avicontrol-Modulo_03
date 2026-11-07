@@ -6,6 +6,7 @@ import co.edu.unimagdalena.avicontrol.domain.exception.LiquidacionYaExistenteExc
 import co.edu.unimagdalena.avicontrol.domain.exception.LoteNoEncontradoException;
 import co.edu.unimagdalena.avicontrol.domain.exception.LoteNoLiquidableException;
 import co.edu.unimagdalena.avicontrol.domain.exception.ParametroInvalidoException;
+import co.edu.unimagdalena.avicontrol.domain.exception.RangoFechasInvalidoException;
 import co.edu.unimagdalena.avicontrol.domain.exception.VistaPreviaDesactualizadaException;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
@@ -226,6 +227,19 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
       problema.setProperty("partidasPendientes", ex.getPartidasPendientes());
     }
     return respuesta(problema);
+  }
+
+  /** CU06.FR-005: {@code desde} posterior a {@code hasta} en el historial. */
+  @ExceptionHandler(RangoFechasInvalidoException.class)
+  public ResponseEntity<Object> handleRangoFechasInvalido(
+      RangoFechasInvalidoException ex, WebRequest request) {
+    return respuesta(
+        problema(
+            HttpStatus.BAD_REQUEST,
+            "rango-fechas-invalido",
+            "Rango de fechas inválido",
+            ex.getMessage(),
+            request));
   }
 
   /** Cualquier error no controlado: {@code 500 error-interno}, sin exponer trazas. */
