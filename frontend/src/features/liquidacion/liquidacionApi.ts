@@ -1,5 +1,7 @@
 import { httpClient } from '../../shared/api/httpClient.ts'
 import type {
+  Anulacion,
+  AnulacionRequest,
   GenerarLiquidacionRequest,
   Liquidacion,
   LiquidacionPrevia,
@@ -18,4 +20,8 @@ export function generarLiquidacion(request: GenerarLiquidacionRequest) {
 
 export function consultarLiquidacion(idLiquidacion: string) {
   return httpClient.get<Liquidacion>(`/api/v1/liquidaciones/${encodeURIComponent(idLiquidacion)}`)
+}
+
+export function anularLiquidacion(idLiquidacion: number, request: AnulacionRequest) {
+  return httpClient.put<Anulacion>(`/api/v1/liquidaciones/${idLiquidacion}/anulacion`, request)
 }
