@@ -65,7 +65,7 @@ export default function Layout() {
           </EnlaceMenu>
         </nav>
       </aside>
-      <div className="my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-3xl bg-fondo">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-fondo">
         <AvisoDatosSimulados />
         <main className="flex-1 overflow-y-auto p-6">
           <Outlet />
