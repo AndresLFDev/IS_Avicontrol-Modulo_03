@@ -1,4 +1,5 @@
 import { Outlet } from 'react-router'
+import AvisoDatosSimulados from './AvisoDatosSimulados.tsx'
 
 // El indicador de sincronización con M1 y M2 (RT-09) se agrega con el plan 001.
 export default function Layout() {
@@ -8,6 +9,7 @@ export default function Layout() {
         <span className="text-xl font-bold">AviControl</span>
         <span>Módulo 3 · Liquidación de Lote y Análisis de Rentabilidad</span>
       </header>
+      <AvisoDatosSimulados />
       <main className="flex-1 p-6">
         <Outlet />
       </main>
