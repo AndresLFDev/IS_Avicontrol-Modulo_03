@@ -19,9 +19,9 @@ import org.springframework.test.context.ActiveProfiles;
 @SpringBootTest
 @ActiveProfiles("test")
 @Import(TestcontainersConfiguration.class)
-class RegistroSincronizacionJdbcAdapterIT {
+class RegistroSincronizacionJpaAdapterIT {
 
-  @Autowired private RegistroSincronizacionJdbcAdapter adaptador;
+  @Autowired private RegistroSincronizacionJpaAdapter adaptador;
   @Autowired private JdbcTemplate jdbc;
 
   @BeforeEach
