@@ -22,9 +22,9 @@ import org.springframework.test.context.ActiveProfiles;
 @SpringBootTest
 @ActiveProfiles("test")
 @Import(TestcontainersConfiguration.class)
-class LoteJdbcAdapterIT {
+class LoteJpaAdapterIT {
 
-  @Autowired private LoteJdbcAdapter adaptador;
+  @Autowired private LoteJpaAdapter adaptador;
   @Autowired private JdbcTemplate jdbc;
 
   private long idRegistro;

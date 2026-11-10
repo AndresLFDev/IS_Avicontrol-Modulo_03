@@ -167,7 +167,7 @@ public class LiquidacionJpaAdapter implements LiquidacionRepository {
   @Override
   public Pagina<HistorialItemDto> buscarHistorial(
       String search, Instant desde, Instant hastaExclusivo, int page, int size) {
-    String patron = search == null ? null : "%" + LoteJdbcAdapter.escaparLike(search) + "%";
+    String patron = search == null ? null : "%" + LoteJpaAdapter.escaparLike(search) + "%";
     OffsetDateTime inicio = enUtc(desde);
     OffsetDateTime fin = enUtc(hastaExclusivo);
 
