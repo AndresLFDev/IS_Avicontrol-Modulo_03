@@ -15,16 +15,12 @@ import co.edu.unimagdalena.avicontrol.domain.port.in.dto.HistorialItemDto;
 import co.edu.unimagdalena.avicontrol.domain.port.out.LiquidacionRepository;
 import co.edu.unimagdalena.avicontrol.domain.shared.Pagina;
 import java.math.RoundingMode;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -35,32 +31,15 @@ public class LiquidacionJpaAdapter implements LiquidacionRepository {
 
   private static final String UQ_LOTE_ACTIVA = "uq_lote_activa";
 
-  /**
-   * Base del historial (M3-CU06.FR-003). El galpón se toma de la Liquidación, no del lote, para que
-   * las de lotes ya desvinculados sigan apareciendo bajo el galpón histórico.
-   */
-  private static final String HISTORIAL_FILTRADO =
-      """
-      FROM liquidacion liq
-      JOIN lote l ON l.id_lote = liq.id_lote
-      JOIN galpon g ON g.id_galpon = liq.id_galpon
-      WHERE (CAST(:search AS VARCHAR) IS NULL
-             OR l.nombre ILIKE CAST(:patron AS VARCHAR) ESCAPE '!'
-             OR g.nombre ILIKE CAST(:patron AS VARCHAR) ESCAPE '!'
-             OR CAST(liq.id_lote AS VARCHAR) = LOWER(CAST(:search AS VARCHAR))
-             OR CAST(liq.id_galpon AS VARCHAR) = LOWER(CAST(:search AS VARCHAR)))
-        AND (CAST(:desde AS TIMESTAMPTZ) IS NULL
-             OR liq.fecha_hora_generacion >= CAST(:desde AS TIMESTAMPTZ))
-        AND (CAST(:hasta AS TIMESTAMPTZ) IS NULL
-             OR liq.fecha_hora_generacion < CAST(:hasta AS TIMESTAMPTZ))
-      """;
-
   private final LiquidacionJpaRepository repositorio;
-  private final JdbcClient jdbc;
+  private final LoteJpaRepository lotes;
+  private final GalponJpaRepository galpones;
 
-  public LiquidacionJpaAdapter(LiquidacionJpaRepository repositorio, JdbcClient jdbc) {
+  public LiquidacionJpaAdapter(
+      LiquidacionJpaRepository repositorio, LoteJpaRepository lotes, GalponJpaRepository galpones) {
     this.repositorio = repositorio;
-    this.jdbc = jdbc;
+    this.lotes = lotes;
+    this.galpones = galpones;
   }
 
   @Override
@@ -131,17 +110,9 @@ public class LiquidacionJpaAdapter implements LiquidacionRepository {
 
   @Override
   public List<PartidaCosto> buscarPartidas(long idLiquidacion) {
-    return jdbc.sql(
-            """
-            SELECT categoria, concepto, cantidad, unidad_medida, precio_unitario_cop,
-                   subtotal_cop, fuente_origen, referencia_origen
-              FROM partida_costo_lote
-             WHERE id_liquidacion = :id
-             ORDER BY id_partida
-            """)
-        .param("id", idLiquidacion)
-        .query(LiquidacionJpaAdapter::aPartida)
-        .list();
+    return repositorio.findPartidas(idLiquidacion).stream()
+        .map(LiquidacionJpaAdapter::aPartida)
+        .toList();
   }
 
   @Override
@@ -168,70 +139,24 @@ public class LiquidacionJpaAdapter implements LiquidacionRepository {
   public Pagina<HistorialItemDto> buscarHistorial(
       String search, Instant desde, Instant hastaExclusivo, int page, int size) {
     String patron = search == null ? null : "%" + LoteJpaAdapter.escaparLike(search) + "%";
-    OffsetDateTime inicio = enUtc(desde);
-    OffsetDateTime fin = enUtc(hastaExclusivo);
 
-    long total =
-        jdbc.sql("SELECT COUNT(*) " + HISTORIAL_FILTRADO)
-            .param("search", search)
-            .param("patron", patron)
-            .param("desde", inicio)
-            .param("hasta", fin)
-            .query(Long.class)
-            .single();
+    var resultado =
+        repositorio.buscarHistorial(
+            search, patron, desde, hastaExclusivo, PageRequest.of(page, size));
 
-    var filas =
-        jdbc.sql(
-                """
-                SELECT liq.id_liquidacion, liq.fecha_hora_generacion, liq.id_galpon,
-                       g.nombre AS nombre_galpon, liq.id_lote, l.nombre AS nombre_lote,
-                       liq.venta_bruta_cop, liq.porcentaje_mortalidad,
-                       liq.costos_operativos_cop, liq.utilidad_neta_cop, liq.estado
-                """
-                    + HISTORIAL_FILTRADO
-                    + " ORDER BY liq.fecha_hora_generacion DESC, liq.id_liquidacion DESC"
-                    + " LIMIT :limite OFFSET :saltar")
-            .param("search", search)
-            .param("patron", patron)
-            .param("desde", inicio)
-            .param("hasta", fin)
-            .param("limite", size)
-            .param("saltar", (long) page * size)
-            .query(LiquidacionJpaAdapter::aFilaHistorial)
-            .list();
-
-    return Pagina.de(filas, page, size, total);
+    return Pagina.de(resultado.getContent(), page, size, resultado.getTotalElements());
   }
 
-  private static OffsetDateTime enUtc(Instant instante) {
-    return instante == null ? null : instante.atOffset(ZoneOffset.UTC);
-  }
-
-  private static HistorialItemDto aFilaHistorial(ResultSet rs, int fila) throws SQLException {
-    return new HistorialItemDto(
-        rs.getLong("id_liquidacion"),
-        rs.getObject("fecha_hora_generacion", OffsetDateTime.class).toInstant(),
-        rs.getObject("id_galpon", UUID.class),
-        rs.getString("nombre_galpon"),
-        rs.getObject("id_lote", UUID.class),
-        rs.getString("nombre_lote"),
-        rs.getLong("venta_bruta_cop"),
-        rs.getBigDecimal("porcentaje_mortalidad"),
-        rs.getLong("costos_operativos_cop"),
-        rs.getLong("utilidad_neta_cop"),
-        rs.getString("estado"));
-  }
-
-  private static PartidaCosto aPartida(ResultSet rs, int fila) throws SQLException {
+  private static PartidaCosto aPartida(PartidaCostoEntity p) {
     return new PartidaCosto(
-        CategoriaCosto.valueOf(rs.getString("categoria")),
-        rs.getString("concepto"),
-        rs.getBigDecimal("cantidad"),
-        rs.getString("unidad_medida"),
-        rs.getBigDecimal("precio_unitario_cop"),
-        rs.getLong("subtotal_cop"),
-        FuenteSincronizacion.valueOf(rs.getString("fuente_origen")),
-        rs.getString("referencia_origen"));
+        p.categoria,
+        p.concepto,
+        p.cantidad,
+        p.unidadMedida,
+        p.precioUnitarioCop,
+        p.subtotalCop,
+        p.fuenteOrigen,
+        p.referenciaOrigen);
   }
 
   private static SnapshotDatosOrigenEntity snapshot(
@@ -246,24 +171,16 @@ public class LiquidacionJpaAdapter implements LiquidacionRepository {
   }
 
   private Liquidacion aDominio(LiquidacionEntity e) {
-    var nombres =
-        jdbc.sql(
-                """
-                SELECT l.nombre AS nombre_lote, g.nombre AS nombre_galpon
-                  FROM lote l, galpon g
-                 WHERE l.id_lote = :idLote AND g.id_galpon = :idGalpon
-                """)
-            .param("idLote", e.idLote)
-            .param("idGalpon", e.idGalpon)
-            .query((rs, i) -> new String[] {rs.getString(1), rs.getString(2)})
-            .single();
+    // El galpón es el de la Liquidación, no el actual del lote
+    String nombreLote = lotes.findNombre(e.idLote).orElseThrow();
+    String nombreGalpon = galpones.findNombre(e.idGalpon).orElseThrow();
     return new Liquidacion(
         e.id,
         e.estado,
         e.idLote,
         e.idGalpon,
-        nombres[0],
-        nombres[1],
+        nombreLote,
+        nombreGalpon,
         e.idResultadoSacrificio,
         e.pollosVendidos,
         e.pesoTotalKg,

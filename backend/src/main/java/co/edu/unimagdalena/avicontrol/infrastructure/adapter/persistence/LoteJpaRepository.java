@@ -74,6 +74,10 @@ interface LoteJpaRepository extends JpaRepository<LoteEntity, UUID> {
           + ") <> 'LIQUIDADO'")
   boolean existeAlgunoListable();
 
+  /** Solo el nombre: evita leer campos de un proxy perezoso ya presente en la sesión. */
+  @Query("SELECT l.nombre FROM LoteEntity l WHERE l.idLote = :idLote")
+  Optional<String> findNombre(UUID idLote);
+
   /** El lote con su galpón en una sola consulta. */
   @Query("SELECT l FROM LoteEntity l JOIN FETCH l.galpon WHERE l.idLote = :idLote")
   Optional<LoteEntity> findConGalpon(UUID idLote);
