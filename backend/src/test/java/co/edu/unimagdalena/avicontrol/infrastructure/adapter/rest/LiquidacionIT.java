@@ -63,6 +63,13 @@ class LiquidacionIT {
   @Autowired private GenerarLiquidacionUseCase generar;
   @Autowired private AnularLiquidacionUseCase anular;
 
+  /**
+   * Los ids de las partidas de alimento y de los consumos de medicamento crecen en el orden en que
+   * se insertan: el dominio los ordena por id y el test afirma ese orden (Pre-inicio, Inicio,
+   * Engorde; REC-090 antes que REC-085). Con ids aleatorios el orden cambiaba en cada corrida.
+   */
+  private long secuenciaIds;
+
   @BeforeEach
   void cargarCopiaLocal() {
     jdbc.execute(
@@ -528,8 +535,9 @@ class LiquidacionIT {
         "INSERT INTO partida_alimento_lote (id_partida_origen, id_lote, id_galpon, tipo_alimento,"
             + " cantidad_kg, precio_unitario_kg_cop, estado_valorizacion, referencia_origen,"
             + " fecha_hora_sync)"
-            + " SELECT gen_random_uuid(), id_lote, id_galpon, ?, ?, ?, ?, 'REC-1',"
+            + " SELECT ?, id_lote, id_galpon, ?, ?, ?, ?, 'REC-1',"
             + " TIMESTAMPTZ '2026-10-20 09:10:01-05' FROM lote WHERE id_lote = ?",
+        new UUID(0L, ++secuenciaIds),
         tipo,
         new BigDecimal(cantidad),
         precio == null ? null : new BigDecimal(precio),
@@ -538,7 +546,7 @@ class LiquidacionIT {
   }
 
   private void medicamento(UUID lote, String nombre, String cantidad, String[][] tramos) {
-    UUID consumo = UUID.randomUUID();
+    UUID consumo = new UUID(0L, ++secuenciaIds);
     jdbc.update(
         "INSERT INTO consumo_medicamento_lote (id_consumo_origen, id_lote, id_galpon, medicamento,"
             + " fecha_consumo, cantidad_unidad_base, unidad_base, fecha_hora_sync)"
