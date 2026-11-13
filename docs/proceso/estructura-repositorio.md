@@ -119,12 +119,22 @@ docs/
 │   ├── general.md                        stack, capas, modelo de datos
 │   └── diagramas/
 │       └── casos-uso.drawio              fuente editable
+├── pruebas/                              SOLO carpetas: casos y datos de prueba manual
+│   ├── casos/
+│   │   ├── m3-cu01-lista-lotes.md        un caso de prueba por caso de uso implementado
+│   │   ├── m3-cu03-generar-liquidacion.md
+│   │   └── ...
+│   └── datos/
+│       ├── consultas-demo.sql            consultas de solo lectura para ver la base
+│       └── reset-demo.sql                borra lo generado por la app (solo dev)
 ├── plantillas/
 │   ├── spec.md
-│   └── plan.md
+│   ├── plan.md
+│   └── caso-de-prueba.md
 └── proceso/
     ├── control-cambios.md                registro SC-<n>
     ├── estructura-repositorio.md         este documento
+    ├── guia-pruebas-manuales.md          cómo preparar el entorno y leer los casos de prueba
     └── guia-sdd.md                       cómo usar spec y plan (SDD)
 ```
 
@@ -135,7 +145,9 @@ docs/
 | `features/<cu>/spec.md` | ¿Qué debe hacer este caso de uso? | `docs(requisitos)` |
 | `planes/` | ¿Cómo se implementa este grupo de casos de uso? | `docs(plan)` |
 | `arquitectura/` | ¿Con qué y cómo se construye todo el sistema? | `docs(diseno)` |
-| `plantillas/` | ¿Qué molde copio para un spec o plan nuevo? | `docs` |
+| `pruebas/casos/` | ¿Cómo compruebo a mano que este caso de uso funciona? | `docs` |
+| `pruebas/datos/` | ¿Qué consultas y qué datos uso para ejecutar y revisar esas pruebas? | `docs` |
+| `plantillas/` | ¿Qué molde copio para un spec, un plan o un caso de prueba nuevo? | `docs` |
 | `proceso/` | ¿Cómo trabaja el equipo? | `docs(cambios)` para el registro, `docs` para el resto |
 
 Reglas:
@@ -143,6 +155,8 @@ Reglas:
 - **Un caso de uso = una carpeta** en `features/`, con su `spec.md` y nada más. Si un caso de uso necesita un diagrama propio, va en `features/<cu>/diagramas/`.
 - **Un plan cubre uno o más specs.** Los casos de uso que se implementan juntos (mismo modelo, mismos endpoints) comparten plan. Cada plan lista al inicio, en `**Specs**:`, los specs que cubre con enlace, y todo spec debe estar cubierto por exactamente un plan.
 - **Nombre de un plan:** `<nnn>-<descripcion>.md`, con número de tres dígitos consecutivo que no se reutiliza (`005-...`).
+- **Un caso de prueba por caso de uso**, en `pruebas/casos/<cu>.md`, con el mismo nombre que la carpeta del caso de uso en `features/` y escrito con la plantilla `plantillas/caso-de-prueba.md`. Los casos de prueba no van dentro de `features/<cu>/`, que solo lleva el `spec.md`.
+- **`pruebas/datos/` separa las consultas de solo lectura del reinicio.** `reset-demo.sql` borra datos y por eso va en su propio archivo. Ninguno de los dos va en `backend/src/main/resources/db/`, que es solo para las migraciones y los seeds de Flyway (`V<n>__descripcion.sql`).
 - **Nada suelto en `features/`.** Un documento que hable de varios casos de uso no es de una feature: va en `requisitos/` (si es qué) o en `arquitectura/` (si es cómo).
 - **El ID del caso de uso no cambia** aunque cambie su nombre; si cambia el nombre, se renombra la carpeta en un commit `refactor` que solo mueve.
 - **Los diagramas se suben solo como fuente editable** (`.drawio`, `.puml`), sin exportaciones `.png` o `.svg`: se ven abriéndolos en draw.io o en la extensión del editor, y así no hay una imagen desactualizada respecto a su fuente.
