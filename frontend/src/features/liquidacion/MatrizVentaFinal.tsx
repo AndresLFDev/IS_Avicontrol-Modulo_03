@@ -52,7 +52,7 @@ export default function MatrizVentaFinal({ matriz }: { matriz: Matriz }) {
         <Indicador
           titulo="Utilidad neta"
           valor={formatCop(matriz.utilidadNetaCop)}
-          className={matriz.utilidadNetaCop < 0 ? 'text-error' : 'text-green-700'}
+          className={matriz.utilidadNetaCop < 0 ? text-red-600' : 'text-green-600'}
         />
       </div>
 
@@ -82,7 +82,7 @@ export default function MatrizVentaFinal({ matriz }: { matriz: Matriz }) {
           <dt>Costo de población</dt>
           <dd>{formatCop(subtotales.costoPoblacion)}</dd>
         </div>
-        <div className="flex justify-between border-t border-gray-400 pt-1 font-semibold">
+        <div className="flex justify-between border-t border-gray-300 pt-1 font-semibold text-black">
           <dt>Total costos operativos</dt>
           <dd>{formatCop(matriz.costosOperativosCop)}</dd>
         </div>
