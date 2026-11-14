@@ -22,6 +22,27 @@ function Icono({ children }: { children: ReactNode }) {
   )
 }
 
+function Pollo() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 48 48"
+      className="size-8"
+      fill="white"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinejoin="round"
+    >
+      <path d="M14.5 15 C11.5 11 12.5 6 16.5 6.5 C17.5 3 21.5 2.5 24 5 C26.5 2.5 30.5 3 31.5 6.5 C35.5 6 36.5 11 33.5 15 Z" />
+      <path d="M7 27 C7 18.5 14 11.5 24 11.5 C34 11.5 41 18.5 41 27 C41 36 34 42.5 24 42.5 C14 42.5 7 36 7 27 Z" />
+      <path d="M21.5 35 V43 A2.5 2.5 0 0 0 26.5 43 V35 Z" />
+      <path d="M24 28 L29.5 33.5 L24 39 L18.5 33.5 Z" />
+      <ellipse cx="17" cy="25" rx="1.8" ry="2.6" fill="currentColor" stroke="none" />
+      <ellipse cx="31" cy="25" rx="1.8" ry="2.6" fill="currentColor" stroke="none" />
+    </svg>
+  )
+}
+
 function EnlaceMenu({
   to,
   nombre,
@@ -45,12 +66,13 @@ export default function Layout() {
   return (
     <div className="flex h-screen bg-black">
       <aside className="flex w-16 shrink-0 flex-col items-center gap-6 py-6">
+        
         <span
           title="AviControl · Módulo 3: Liquidación de Lote y Análisis de Rentabilidad"
-          className="flex size-11 items-center justify-center rounded-xl bg-white text-xl font-bold text-black"
+          className="flex size-11 items-center justify-center rounded-xl bg-white text-black"
         >
-          <span aria-hidden="true">A</span>
-          <span className="sr-only">AviControl</span>
+        <Pollo />
+        <span className="sr-only">AviControl</span>
         </span>
         <nav aria-label="Principal" className="flex flex-col gap-3">
           <EnlaceMenu to="/" end nombre="Lotes">
