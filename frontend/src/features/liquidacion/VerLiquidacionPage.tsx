@@ -70,7 +70,7 @@ export default function VerLiquidacionPage() {
         </h1>
         <span
           className={`rounded-full px-3 py-1 text-sm font-semibold ${
-            activa ? 'bg-green-100 text-green-900' : ''bg-red-200/70 text-red-800'
+            activa ? 'bg-green-100 text-green-900' : 'bg-red-200/70 text-red-800'
           }`}
         >
           {liquidacion.estado}
