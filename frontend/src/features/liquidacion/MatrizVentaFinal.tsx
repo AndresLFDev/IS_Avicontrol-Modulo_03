@@ -52,7 +52,7 @@ export default function MatrizVentaFinal({ matriz }: { matriz: Matriz }) {
         <Indicador
           titulo="Utilidad neta"
           valor={formatCop(matriz.utilidadNetaCop)}
-          className={matriz.utilidadNetaCop < 0 ? text-red-600' : 'text-green-600'}
+          className={matriz.utilidadNetaCop < 0 ? 'text-red-600' : 'text-green-600'}
         />
       </div>
 
