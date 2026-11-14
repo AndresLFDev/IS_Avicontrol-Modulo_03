@@ -53,4 +53,4 @@ El Módulo 3 se encarga de determinar la rentabilidad real de cada lote avícola
 Este proyecto sigue el marco de **Specification-Driven Development (SDD)**:
 1. **Fase 1 (SPEC):** Especificaciones atómicas y autocontenidas (`docs/features/`).
 2. **Fase 2 (PLAN):** Diseño técnico de arquitectura, modelos y contratos de integración (`docs/planes/` y `docs/arquitectura/general.md`).
-3. **Fase 3 (Implementación):** Desarrollo en Java 21 (LTS) con Spring Boot y Gradle, PostgreSQL, integración con los módulos 1 y 2 por eventos Apache Kafka y pruebas con JUnit 5, Spring Boot Test y Testcontainers.
+3. **Fase 3 (Implementación):** Desarrollo en Java 21 (LTS) con Spring Boot y Gradle, PostgreSQL, integración prevista con los módulos 1 y 2 por eventos Apache Kafka (aún no implementada) y pruebas con JUnit 5, Spring Boot Test y Testcontainers.
