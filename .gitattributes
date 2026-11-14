@@ -1,0 +1,2 @@
+# Fin de linea LF en el repositorio, para que Prettier y spotless den el mismo resultado en Windows, Linux y macOS.
+* text=auto eol=lf
