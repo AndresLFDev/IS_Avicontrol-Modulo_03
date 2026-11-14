@@ -70,7 +70,7 @@ export default function VerLiquidacionPage() {
         </h1>
         <span
           className={`rounded-full px-3 py-1 text-sm font-semibold ${
-            activa ? 'bg-green-100 text-green-900' : 'bg-gray-200 text-gray-700'
+            activa ? 'bg-green-100 text-green-900' : ''bg-red-200/70 text-red-800'
           }`}
         >
           {liquidacion.estado}
@@ -96,8 +96,8 @@ export default function VerLiquidacionPage() {
       </p>
 
       {anulacion && (
-        <div className="rounded-md bg-gray-100 p-3 text-sm">
-          <p className="font-semibold">Anulada</p>
+        <div className="rounded-md bg-red-50/60 p-3 text-sm text-red-900/60">
+          <p className="font-semibold text-red-800/70">Anulada</p>
           <p>Motivo: {anulacion.motivo}</p>
           <p>
             Por {anulacion.usuarioResponsable} · {formatFechaHora(anulacion.fechaHoraAnulacion)}
