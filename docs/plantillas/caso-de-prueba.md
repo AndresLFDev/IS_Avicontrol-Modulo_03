@@ -70,6 +70,21 @@ Add or remove sections and steps as needed for the scenario.
 
 --------------------------------------------------------------------------------
 
+##### Consultas SQL de este caso  *(si algún paso consulta la base de datos)*
+<!--
+Pega aquí, en bloques ```sql, cada consulta que usan los pasos, con su número ("Consulta 1", "Consulta 2"...).
+Los pasos dicen "Ejecutar la consulta 1 (al final de este caso)". Así el caso se prueba sin abrir otro archivo.
+Si el caso borra datos, la consulta de reinicio va aparte y marcada "(borra datos)".
+-->
+
+**Consulta 1**
+
+```sql
+SELECT ... ;
+```
+
+--------------------------------------------------------------------------------
+
 ##### Edge Cases & Boundary Conditions
 * **EC-001** : What happens when network connection is dropped during step [X]?
 * **EC-002** : How does system handle concurrent logins with the same account?

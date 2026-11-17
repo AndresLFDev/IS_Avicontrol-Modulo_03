@@ -12,6 +12,9 @@
 -- generar nada. Las secciones 6 a 13 se miran después de usar la app. Para volver al estado
 -- inicial usa reset-demo.sql (está en otro archivo a propósito: borra datos).
 --
+-- Cada caso de docs/pruebas/casos/ tiene copiadas al final las consultas que usa, con esta misma
+-- numeración. Si cambias una consulta aquí, cámbiala también en los casos.
+--
 -- Los ids y los valores esperados salen del seed db/seed/V1000. Si ese seed cambia, hay que
 -- revisar estas consultas y los casos de prueba.
 

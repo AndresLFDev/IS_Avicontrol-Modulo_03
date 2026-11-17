@@ -29,14 +29,16 @@ Hay un caso de prueba por cada caso de uso implementado:
    En PowerShell: `$env:DB_PORT='5433'; ./gradlew bootRun --args='--spring.profiles.active=dev'`.
 4. Arranca el frontend desde `frontend/` con `npm run dev:backend`. Con `npm run dev` los datos son simulados en el navegador y no se escribe nada en la base.
 5. Abre <http://localhost:5173>. La franja "Datos simulados" no debe aparecer.
-6. Conecta un cliente SQL (por ejemplo la ventana Database de IntelliJ) a `localhost`, puerto `DB_PORT`, base `avicontrol`, usuario `avicontrol`, contraseña `avicontrol` (valores de desarrollo). Abre [`consultas-demo.sql`](../pruebas/datos/consultas-demo.sql) y ejecuta las secciones 1 y 5: son la referencia de lo que debe verse al inicio.
+6. Conecta un cliente SQL (por ejemplo la ventana Database de IntelliJ) a `localhost`, puerto `DB_PORT`, base `avicontrol`, usuario `avicontrol`, contraseña `avicontrol` (valores de desarrollo). Las consultas que usa cada caso están copiadas al final de ese caso, en la sección "Consultas SQL de este caso", listas para pegar: no hace falta abrir otro archivo. [`consultas-demo.sql`](../pruebas/datos/consultas-demo.sql) las reúne todas con la misma numeración; las consultas 1 y 5 son la referencia de lo que debe verse al inicio.
 7. La API también se puede probar en Swagger: <http://localhost:8080/swagger-ui.html>.
 
 No hay inicio de sesión: la aplicación no pide autenticación. El usuario responsable se escribe en los formularios (mínimo 3 caracteres).
 
 ## 3. Datos de prueba
 
-Los casos usan los datos del seed. Para repetir las pruebas desde cero se ejecuta [`reset-demo.sql`](../pruebas/datos/reset-demo.sql), que borra lo generado por la app y no toca el seed. Está en un archivo aparte de las consultas porque borra datos: no se ejecuta completo por accidente.
+Los casos usan los datos del seed. Para repetir las pruebas desde cero se ejecuta la consulta de reinicio que está al final de cada caso (es la misma de [`reset-demo.sql`](../pruebas/datos/reset-demo.sql)): borra lo generado por la app y no toca el seed. En los casos va separada de las consultas de lectura y marcada como "borra datos"; en `datos/` está en un archivo aparte para que no se ejecute completo por accidente.
+
+Las consultas están en dos lugares: dentro de cada caso y en `consultas-demo.sql`. Si se cambia una, se cambia en los dos y se vuelve a comprobar el valor esperado.
 
 | Lote | Id | Situación en el seed |
 |---|---|---|
