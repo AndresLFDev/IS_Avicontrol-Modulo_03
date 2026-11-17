@@ -6,6 +6,9 @@
 -- (galpones, lotes, partidas de alimento, medicinas, alertas, resultados ni la bitácora de
 -- sincronización).
 --
+-- Cada caso de docs/pruebas/casos/ lleva copiada esta misma consulta de reinicio. Si la cambias
+-- aquí, cámbiala también en los casos.
+--
 -- El orden respeta las claves foráneas. Selecciona las seis sentencias y ejecútalas juntas
 -- (Ctrl+Enter). Después ejecuta la sección 1 de consultas-demo.sql: los tres lotes POR_LIQUIDAR
 -- deben volver a aparecer.
