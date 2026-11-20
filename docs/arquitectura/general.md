@@ -571,7 +571,7 @@ Los `payload` y las respuestas están en el [plan 001](../planes/001-sincronizac
 
 ### B. Reglas de consulta
 
-- **Tarea programada**: `SincronizacionM1Job` consulta a M1 al arrancar y cada `sync.m1.intervalo` (por defecto `PT5M`). La sincronización con M2 consulta, lote por lote, solo los lotes que ya existen en la copia local con alerta de vaciado y sin Liquidación `ACTIVA`.
+- **Tarea programada**: `SincronizacionM1Job` consulta a M1 poco después de arrancar (10 s) y luego cada `sync.m1.intervalo` (por defecto `PT5M`). La sincronización con M2 consulta, lote por lote, solo los lotes que ya existen en la copia local con alerta de vaciado y sin Liquidación `ACTIVA`.
 - **Estado completo**: cada respuesta trae el estado completo de la entidad (no deltas), de modo que repetir la consulta produce el mismo resultado.
 - **Idempotencia**: las escrituras son *upsert* por la llave natural (`id_galpon`, `id_lote`, `id_resultado`, `id_partida_origen`, `id_consumo_origen`); las alertas de vaciado se insertan solo si no existen (son inmutables).
 - **Orden**: primero galpones y lotes de M1, después los datos de M2 de los lotes ya existentes. Por eso no hay datos "pendientes de lote".

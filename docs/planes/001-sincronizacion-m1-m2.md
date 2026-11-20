@@ -228,8 +228,8 @@ public class SincronizacionM1Job {
 
     // Constructor...
 
-    /** Al arrancar (initialDelay 0) y luego cada ${sync.m1.intervalo}. Nunca lanza: un fallo queda en la bitácora. */
-    @Scheduled(initialDelay = 0, fixedDelayString = "${sync.m1.intervalo:PT5M}")
+    /** Poco después de arrancar (10 s) y luego cada ${sync.m1.intervalo}. Nunca lanza: un fallo queda en la bitácora. */
+    @Scheduled(initialDelayString = "${sync.m1.retraso-inicial:PT10S}", fixedDelayString = "${sync.m1.intervalo:PT5M}")
     public void ejecutar() {
         sincronizar.sincronizar();
     }
