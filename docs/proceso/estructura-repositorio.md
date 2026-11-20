@@ -49,7 +49,7 @@ IS_Avicontrol-Modulo_03/
 │   │   │   ├── java/co/edu/unimagdalena/avicontrol/
 │   │   │   │   ├── domain/         reglas de negocio puras y puertos
 │   │   │   │   ├── application/    servicios de casos de uso
-│   │   │   │   └── infrastructure/ Spring, REST, JPA, Kafka, POI
+│   │   │   │   └── infrastructure/ Spring, REST, JPA, clientes HTTP, POI
 │   │   │   └── resources/          configuración y migraciones
 │   │   └── test/                   espejo de main
 │   ├── .env.example
@@ -195,21 +195,22 @@ co/edu/unimagdalena/avicontrol/
 │   ├── port/
 │   │   ├── in/                           *UseCase (casos de uso)
 │   │   │   └── dto/                      records de entrada/salida de los casos de uso
-│   │   │       └── evento/               datos de eventos entrantes ya validados
+│   │   │       └── sync/                 datos de M1 y M2 ya traducidos y validados
 │   │   └── out/                          *Repository, *Publisher, *Port
 │   └── shared/                           Rounding, Pagina
 │
 ├── application/
 │   └── service/                          *Service que implementan los *UseCase, @Transactional
-│       └── sync/                         procesamiento de eventos de M1/M2 y aviso a M2
+│       └── sync/                         sincronización con M1/M2 por REST y aviso a M2
 │
 └── infrastructure/
     ├── adapter/
     │   ├── rest/                         *Controller, *Request, *Response
-    │   ├── messaging/                    *Consumer y *Producer de Kafka, sobres JSON
+    │   ├── client/                       Cliente*Rest (M1 y M2), publicador del aviso
+    │   ├── scheduling/                   tareas @Scheduled de sincronización
     │   ├── persistence/                  *Entity, *JpaRepository, *PersistenceAdapter, *EntityMapper
     │   └── export/                       ExcelWorkbookBuilder (Apache POI)
-    ├── config/                           KafkaConfig, OpenApiConfig, ClockConfig, SchedulingConfig
+    ├── config/                           RestClientConfig, OpenApiConfig, ClockConfig, SchedulingConfig
     └── exception/                        GlobalExceptionHandler
 ```
 
@@ -218,8 +219,8 @@ co/edu/unimagdalena/avicontrol/
 | Capa | Puede contener | No puede contener | Puede depender de |
 |---|---|---|---|
 | `domain` | Entidades, enums, value objects, fórmulas, excepciones de negocio, interfaces de casos de uso (`port/in`) con sus DTOs (`port/in/dto`) e interfaces de repositorios y publicadores (`port/out`) | Anotaciones de Spring, `@Entity`, `@JsonProperty`, tipos de Spring Data (`Page`), `*Request`/`*Response` HTTP, clases de otras capas | Nada |
-| `application` | Servicios que implementan los casos de uso, `@Service`, `@Transactional`, `@Scheduled` | Controladores, entidades JPA, clientes Kafka, Apache POI | `domain` |
-| `infrastructure` | Controladores, `Request`/`Response`, entidades JPA, mappers, consumidores y productores Kafka, POI, configuración | Reglas de negocio o fórmulas | `application`, `domain` |
+| `application` | Servicios que implementan los casos de uso, `@Service`, `@Transactional`, `@Scheduled` | Controladores, entidades JPA, clientes HTTP, Apache POI | `domain` |
+| `infrastructure` | Controladores, `Request`/`Response`, entidades JPA, mappers, clientes REST de M1 y M2, publicador del aviso, POI, configuración | Reglas de negocio o fórmulas | `application`, `domain` |
 
 La regla de dependencias la verifica ArchUnit en `ArchitectureTest` (ver [sección 7](#7-backend-pruebas-backendsrctest)). Un PR que la rompa no pasa la CI.
 
@@ -233,7 +234,7 @@ Las áreas no son paquetes, pero sí deciden el alcance del commit (ver [`CONTRI
 | `venta` | Venta bruta dentro de `CalculoLiquidacion` |
 | `liquidacion` | `Liquidacion`, `GenerarLiquidacionService`, `AnularLiquidacionService`, `ListarLotesService`, `LiquidacionController`, `LoteController` |
 | `reportes` | `ConsultarHistorialService`, `ConsultarDesgloseService`, `ExportarExcelService`, `ExcelWorkbookBuilder` |
-| `integracion` | `application/service/sync/`, `adapter/messaging/`, `SincronizacionController` (estado RT-09), copia local de M1 y M2 |
+| `integracion` | `application/service/sync/`, `adapter/client/`, `adapter/scheduling/`, `SincronizacionController` (estado RT-09), copia local de M1 y M2 |
 
 ---
 
@@ -241,7 +242,7 @@ Las áreas no son paquetes, pero sí deciden el alcance del commit (ver [`CONTRI
 
 ```
 resources/
-├── application.yml                       configuración común (tópicos Kafka, umbrales)
+├── application.yml                       configuración común (URL de M1 y M2, intervalos, umbrales)
 ├── application-dev.yml                   PostgreSQL y Kafka de compose.yaml; activa db/seed
 ├── application-test.yml
 ├── application-prod.yml                  solo referencias a variables de entorno
@@ -275,15 +276,15 @@ backend/src/test/
 └── resources/
     ├── application-test.yml
     └── fixtures/
-        ├── m1/galpon-actualizado.json     eventos simulados de M1
-        └── m2/resultado-sacrificio.json   eventos simulados de M2
+        ├── m1/galpon-detalle.json         respuesta simulada de M1
+        └── m2/resultado-sacrificio.json   respuesta simulada de M2
 ```
 
 | Tipo de prueba | Sufijo | Se ejecuta con |
 |---|---|---|
 | Unitaria (dominio o servicio con Mockito) | `Test` | `./gradlew test` |
 | Aceptación de un caso de uso | `CU<nn><Nombre>Test` | `./gradlew test` |
-| Integración (Spring Boot Test + Testcontainers con PostgreSQL y Kafka) | `IT` | `./gradlew integrationTest` |
+| Integración (Spring Boot Test + Testcontainers con PostgreSQL y servidores HTTP simulados) | `IT` | `./gradlew integrationTest` |
 
 `./gradlew check` ejecuta todo lo anterior más Spotless y ArchUnit.
 
@@ -417,9 +418,9 @@ Estas reglas aplican a `docs/`. El código de backend y frontend sigue las conve
 | Repositorio Spring Data | `JpaRepository` | `infrastructure` | `LiquidacionJpaRepository` |
 | Implementación de un repositorio del dominio | `PersistenceAdapter` | `infrastructure` | `LiquidacionPersistenceAdapter` |
 | Conversión entre modelos | `Mapper` | `infrastructure` | `LiquidacionEntityMapper` |
-| Evento Kafka (contrato JSON) | `Event` | `infrastructure` | `ResultadoSacrificioPublicadoEvent` |
-| Consumidor / productor Kafka | `Consumer` / `Producer` | `infrastructure` | `Modulo2EventConsumer`, `AvisoUtilizacionKafkaProducer` |
-| Configuración | `Config` | `infrastructure` | `KafkaConfig` |
+| Respuesta REST de otro módulo (contrato JSON) | `Response` | `infrastructure` | `GalponM1Response` |
+| Cliente REST / publicador del aviso | `Cliente…Rest` / `Publisher` | `infrastructure` | `ClienteM1Rest`, `AvisoUtilizacionPublisherAdapter` |
+| Configuración | `Config` | `infrastructure` | `RestClientConfig` |
 
 ### Frontend (React)
 
@@ -447,7 +448,7 @@ Estas reglas aplican a `docs/`. El código de backend y frontend sigue las conve
 | Datos de demostración | Numeración desde `V1000` para no chocar con el esquema | `V1000__datos_demo_galpones.sql` |
 | Tablas y columnas | `snake_case`, en singular | `liquidacion`, `precio_kg_cop` |
 | Perfil de configuración | `application-<perfil>.yml` | `application-dev.yml` |
-| Fixture de pruebas (evento Kafka) | `kebab-case.json` dentro de la carpeta del módulo origen | `fixtures/m2/resultado-sacrificio.json` |
+| Fixture de pruebas (respuesta de M1 o M2) | `kebab-case.json` dentro de la carpeta del módulo origen | `fixtures/m2/resultado-sacrificio.json` |
 
 ---
 
@@ -457,11 +458,11 @@ Estas reglas son del backend; las del frontend están en la [sección 8](#reglas
 
 1. **Capa primero, tipo de pieza después.** Una clase nueva se ubica respondiendo: ¿a qué capa pertenece? y ¿qué pieza es (modelo, puerto de entrada o salida, servicio, adaptador)? El árbol oficial está en `general.md`.
 2. **No se crean paquetes por área funcional** (`liquidacion/`, `costos/`) ni paquetes de tipo fuera de los definidos (`models/`, `dtos/`, `utils/`). El sufijo y el nombre de la clase indican rol y área.
-3. **Excepción:** `application/service/sync/` agrupa el procesamiento de eventos de M1 y M2, y `domain/port/in/dto/evento/` sus datos de entrada.
+3. **Excepción:** `application/service/sync/` agrupa la sincronización con M1 y M2, y `domain/port/in/dto/sync/` sus datos de entrada.
 4. **Lo que usan varias áreas** va en `domain/shared/`. No se crean paquetes `util`, `common` ni `helpers`.
 5. **Las pruebas siguen al código.** Si una clase se mueve de paquete, su prueba se mueve en el mismo commit.
 6. **Una clase pública por archivo**, con el mismo nombre del archivo.
-7. **Profundidad máxima:** la de `general.md` (p. ej. `domain/port/in/dto/evento`). Si hace falta un nivel más, se discute antes.
+7. **Profundidad máxima:** la de `general.md` (p. ej. `domain/port/in/dto/sync`). Si hace falta un nivel más, se discute antes.
 8. **`.gitkeep` solo mientras la carpeta esté vacía.** El esqueleto inicial los usa para que Git conserve las carpetas; se borran en el mismo commit que agrega el primer archivo real.
 
 ---

@@ -1,10 +1,10 @@
 # Feature Specification: M3-CU09 – Consultar Alimento Requerido al Módulo 2
 
 **Created**: 2026-09-18  
-**Actualizado**: 2026-10-23  
+**Actualizado**: 2026-11-20 (SC-06: consulta REST en lugar de eventos Kafka)  
 **Módulo**: 3 – Liquidación de Lote y Análisis de Rentabilidad (AVICONTROL)  
 **Actor Externo**: Módulo 2 – Gestión Operativa del Ciclo  
-**Rol Principal**: Módulo 3 (consumidor automático de eventos Kafka)  
+**Rol Principal**: Módulo 3 (cliente automático del REST de Módulo 2)  
 
 ---
 
@@ -16,18 +16,18 @@ Como Módulo 3, quiero recibir de Módulo 2 las partidas de alimento asociadas a
 
 **Why this priority**: El alimento es habitualmente la partida de costo más significativa del ciclo avícola. Sin ella, los Costos Operativos de M3-CU03 quedan incompletos y la Liquidación no puede generarse.
 
-**Independent Test**: Se publican en Kafka las partidas de alimento de un lote y se verifica que la copia local almacena, por cada partida, su tipo de alimento, cantidad en kilogramos, precio unitario por kilogramo y referencia de origen, sin calcular ningún total.
+**Independent Test**: Un servidor simulado de Módulo 2 responde con las partidas de alimento de un lote y se verifica que la copia local almacena, por cada partida, su tipo de alimento, cantidad en kilogramos, precio unitario por kilogramo y referencia de origen, sin calcular ningún total.
 
 **Acceptance Scenarios**:
 
 1. **Scenario**: Sincronización exitosa de partidas de alimento
    - **Given** Módulo 2 dispone de partidas de alimento asociadas al ciclo de un lote, con su tipo, cantidad en kilogramos y precio por kilogramo
-   - **When** M3 procesa los eventos de las partidas
+   - **When** M3 sincroniza el lote
    - **Then** el sistema almacena por cada partida: `idPartidaOrigen`, `idLote`, `tipoAlimento`, `cantidadKg`, `precioUnitarioKgCop`, `referenciaOrigen` y la fecha y hora de sincronización
 
 2. **Scenario**: Partida sin precio aplicable
-   - **Given** Módulo 2 publica una partida de alimento sin precio unitario asociado
-   - **When** M3 procesa el evento
+   - **Given** Módulo 2 informa una partida de alimento sin precio unitario asociado
+   - **When** M3 sincroniza el lote
    - **Then** el sistema almacena la partida marcándola como no valorizada y la expone como partida pendiente, de modo que M3-CU03 bloquee la Liquidación y liste la partida faltante
 
 3. **Scenario**: Ausencia total de partidas de alimento para el ciclo
@@ -35,15 +35,15 @@ Como Módulo 3, quiero recibir de Módulo 2 las partidas de alimento asociadas a
    - **When** se intenta liquidar el lote
    - **Then** el sistema no genera partidas con valor cero y expone el estado para que M3-CU03 bloquee la Liquidación con el mensaje correspondiente
 
-4. **Scenario**: Módulo 2 o el broker no disponibles con copia local previa existente
-   - **Given** existe una copia local de las partidas de alimento y Módulo 2 no publica eventos o el broker no está disponible
+4. **Scenario**: Módulo 2 no disponible con copia local previa existente
+   - **Given** existe una copia local de las partidas de alimento y Módulo 2 no está disponible
    - **When** el administrador solicita generar la Liquidación
    - **Then** el sistema usa la copia local, conserva su fecha y hora de sincronización en el snapshot financiero y no requiere comunicación en vivo
 
 5. **Scenario**: Sincronización idempotente
    - **Given** una partida de alimento ya almacenada en la copia local
-   - **When** M3 recibe nuevamente un evento de la misma partida
-   - **Then** el sistema no crea un registro duplicado; actualiza la partida con el contenido del evento y su fecha y hora de sincronización
+   - **When** M3 vuelve a sincronizar el lote con la misma partida
+   - **Then** el sistema no crea un registro duplicado; actualiza la partida con el contenido consultado y su fecha y hora de sincronización
 
 ---
 
@@ -61,13 +61,13 @@ Como Módulo 3, quiero recibir de Módulo 2 las partidas de alimento asociadas a
 
 ### Functional Requirements
 
-- **FR-001**: El sistema MUST consumir, mediante un proceso automático en segundo plano, los eventos que Módulo 2 publica en Kafka con las partidas de alimento asociadas al ciclo de cada lote.
+- **FR-001**: El sistema MUST consultar, mediante un proceso automático en segundo plano, el REST de Módulo 2 para obtener las partidas de alimento asociadas al ciclo de cada lote (contrato por confirmar, D-08).
 - **FR-002**: Por cada partida, el sistema MUST obtener y almacenar: `idPartidaOrigen`, `idLote`, `idGalpon`, `tipoAlimento`, `cantidadKg`, `precioUnitarioKgCop`, `valorImpuestoCop`, `referenciaOrigen` y la fecha y hora de sincronización.
 - **FR-003**: El sistema NO DEBE calcular subtotales ni totales durante la sincronización. Almacena cantidad y precio unitario; la valorización corresponde a M3-CU03.
 - **FR-004**: El sistema NO DEBE promediar precios entre partidas. Cada tramo de cantidad conserva el precio unitario que le corresponde.
 - **FR-005**: El sistema MUST marcar como no valorizada toda partida que carezca de precio unitario aplicable, y MUST exponerla como partida pendiente para que M3-CU03 bloquee la Liquidación y la liste.
 - **FR-006**: Ante la ausencia total de partidas de alimento para un lote, el sistema NO DEBE generar partidas con valor cero y MUST exponer la ausencia para que M3-CU03 bloquee la Liquidación.
-- **FR-007**: Ante la indisponibilidad del broker o la ausencia de eventos de Módulo 2, el sistema MUST conservar íntegra la copia local previa, registrar el fallo y reanudar el consumo desde el último evento confirmado, sin bloquear ninguna operación de M3.
+- **FR-007**: Ante la indisponibilidad de Módulo 2 (sin respuesta, tiempo agotado o error HTTP 500), el sistema MUST conservar íntegra la copia local previa, registrar el fallo y reintentar en el siguiente ciclo, sin bloquear ninguna operación de M3.
 - **FR-008**: El sistema MUST procesar las sincronizaciones de forma idempotente: recibir la misma partida más de una vez no DEBE crear registros duplicados.
 - **FR-009**: El sistema NO DEBE escribir, modificar ni eliminar información de alimento en Módulo 2. La relación es exclusivamente de lectura.
 
@@ -83,7 +83,7 @@ Como Módulo 3, quiero recibir de Módulo 2 las partidas de alimento asociadas a
 ### Key Entities
 
 - **PartidaAlimentoLote**: Réplica local de una partida de alimento del ciclo. Atributos: `idPartidaOrigen`, `idLote`, `idGalpon`, `tipoAlimento`, `cantidadKg`, `precioUnitarioKgCop`, `valorImpuestoCop`, `estadoValorizacion` (`VALORIZADA` | `PENDIENTE_PRECIO`), `referenciaOrigen`, `fechaHoraSincronizacion`.
-- **RegistroSincronizacion**: Bitácora técnica del proceso, compartida con M3-CU07, M3-CU08 y M3-CU10. Una fila por evento procesado. Atributos: `idSincronizacion`, `fuente` (`MODULO_2`), `topico`, `idEvento`, `fechaHoraInicio`, `fechaHoraFin`, `resultado`, `descripcionError`, `cantidadRegistrosActualizados`.
+- **RegistroSincronizacion**: Bitácora técnica del proceso, compartida con M3-CU07, M3-CU08 y M3-CU10. Una fila por ejecución de la sincronización. Atributos: `idSincronizacion`, `fuente` (`MODULO_2`), `topico` (la ruta consultada), `idEvento` (vacío), `fechaHoraInicio`, `fechaHoraFin`, `resultado`, `descripcionError`, `cantidadRegistrosActualizados`.
 
 ---
 
@@ -91,9 +91,9 @@ Como Módulo 3, quiero recibir de Módulo 2 las partidas de alimento asociadas a
 
 ### Measurable Outcomes
 
-- **SC-001**: El 100% de las partidas de alimento disponibles en Módulo 2 para un lote se refleja en la copia local tras procesar sus eventos.
+- **SC-001**: El 100% de las partidas de alimento disponibles en Módulo 2 para un lote se refleja en la copia local tras una sincronización.
 - **SC-002**: 0% de precios promediados entre partidas con precios distintos.
 - **SC-003**: El 100% de las partidas sin precio aplicable se expone como pendiente y bloquea la Liquidación en M3-CU03.
 - **SC-004**: 0% de subtotales o totales calculados durante la sincronización.
-- **SC-005**: 0% de registros duplicados ante eventos repetidos de la misma partida.
+- **SC-005**: 0% de registros duplicados ante consultas repetidas de la misma partida.
 - **SC-006**: 0% de escrituras de M3 sobre los datos de alimento de Módulo 2.

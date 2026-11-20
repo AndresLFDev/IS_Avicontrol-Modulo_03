@@ -44,10 +44,10 @@ Como administrador financiero, quiero consultar la lista consolidada de lotes qu
    - **When** el administrador accede a la lista
    - **Then** el sistema presenta un estado vacío con el mensaje "No hay lotes disponibles para consultar" y bloquea cualquier intento de generar una Liquidación
 
-6. **Scenario**: Indisponibilidad temporal de Módulo 1 o del broker
-   - **Given** existe una copia local sincronizada previa y no llegan eventos de Módulo 1 o el broker no está disponible
+6. **Scenario**: Indisponibilidad temporal de Módulo 1 o Módulo 2
+   - **Given** existe una copia local sincronizada previa y Módulo 1 o Módulo 2 no responden
    - **When** el administrador consulta la lista de lotes
-   - **Then** el sistema muestra la última copia local disponible, identifica su fecha y hora de actualización, advierte que la copia puede estar desactualizada (RT-09) y reanuda el consumo de eventos en segundo plano sin interrumpir la vista ni los demás módulos
+   - **Then** el sistema muestra la última copia local disponible, identifica su fecha y hora de actualización, advierte que la copia puede estar desactualizada (RT-09) y reintenta la consulta en segundo plano sin interrumpir la vista ni los demás módulos
 
 7. **Scenario**: Filtrado por etapa sin coincidencias
    - **Given** se visualiza la lista de lotes y el usuario selecciona una etapa (`Productivo`, `En Cosecha`, `Aislamiento`, `Por Liquidar`)

@@ -10,10 +10,10 @@ Lista de tareas pendientes y acuerdos del equipo. Estado revisado el 2026-11-13.
 
 ### Integración con Módulo 1 y Módulo 2 (M3-CU07 a M3-CU10)
 
-- [ ] Implementar la sincronización por Kafka según el plan 001 (`docs/planes/001-sincronizacion-m1-m2.md`). El backend tiene la dependencia de Spring Kafka y el servicio en `compose.yaml`, pero todavía no hay consumidores ni publicadores.
+- [ ] Implementar la sincronización por REST según el plan 001 (`docs/planes/001-sincronizacion-m1-m2.md`): primero CU07 con M1 (issue #48), después CU08 a CU10 con M2. El backend aún no tiene clientes REST ni tarea de sincronización; el aviso de utilización solo se guarda en la tabla.
 - [ ] Decisiones D-01 a D-08 con los equipos de M1 y M2 (ver `docs/requisitos/especificacion-general.md`).
-- [ ] D-08: acordar que M1 y M2 publiquen sus eventos en Kafka con los tópicos y campos del plan 001, o ajustar el contrato a lo que publiquen.
-- [ ] D-03: acordar con M2 el formato y la confirmación del aviso de utilización (`avicontrol.m3.avisos-utilizacion`), y que no corrija un resultado ya avisado (es definitivo para M3). Hoy el aviso solo se guarda en la tabla `aviso_utilizacion_resultado` con estado `PENDIENTE`; no se publica.
+- [ ] D-08: acordar con M2 las rutas, la autenticación y los campos de sus consultas (para M1 ya están en su acuerdo de contratos).
+- [ ] D-03: acordar con M2 el canal (REST o Kafka alojado por M2), el formato y la confirmación del aviso de utilización, y que no corrija un resultado ya avisado (es definitivo para M3). Hoy el aviso solo se guarda en la tabla `aviso_utilizacion_resultado` con estado `PENDIENTE`; no se publica.
 
 ## Hecho
 
