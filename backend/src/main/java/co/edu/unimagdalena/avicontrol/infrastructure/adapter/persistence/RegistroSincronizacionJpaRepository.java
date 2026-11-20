@@ -3,6 +3,7 @@ package co.edu.unimagdalena.avicontrol.infrastructure.adapter.persistence;
 import co.edu.unimagdalena.avicontrol.domain.model.FuenteSincronizacion;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -18,4 +19,8 @@ interface RegistroSincronizacionJpaRepository
        ORDER BY r.fechaHoraFin DESC
       """)
   List<Instant> fechasFinExitosas(FuenteSincronizacion fuente, Limit limite);
+
+  /** Última ejecución terminada (con resultado) de la fuente. */
+  Optional<RegistroSincronizacionEntity>
+      findFirstByFuenteAndResultadoIsNotNullOrderByFechaHoraInicioDesc(FuenteSincronizacion fuente);
 }

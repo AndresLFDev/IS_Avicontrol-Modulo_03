@@ -13,8 +13,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * RT-09 (plan 001, T017). Una fuente está desactualizada si su último evento exitoso es más antiguo
- * que {@code sync.umbral-inactividad} o si nunca ha llegado ninguno.
+ * RT-09 (plan 001, T017). Una fuente está desactualizada si su última sincronización exitosa es más
+ * antigua que {@code sync.umbral-inactividad}, si nunca hubo una, o si su última ejecución falló.
  */
 @Service
 public class EstadoSincronizacionService implements ConsultarEstadoSincronizacionUseCase {
@@ -41,7 +41,11 @@ public class EstadoSincronizacionService implements ConsultarEstadoSincronizacio
 
   private EstadoFuente estado(FuenteSincronizacion fuente) {
     Instant ultima = registros.ultimaSincronizacionExitosa(fuente).orElse(null);
-    boolean desactualizada = ultima == null || ultima.isBefore(Instant.now(clock).minus(umbral));
+    // Desactualizada también si la última consulta a la fuente falló: los datos pueden estar viejos
+    boolean desactualizada =
+        ultima == null
+            || ultima.isBefore(Instant.now(clock).minus(umbral))
+            || registros.ultimaEjecucionFallo(fuente);
     return new EstadoFuente(ultima, desactualizada);
   }
 }

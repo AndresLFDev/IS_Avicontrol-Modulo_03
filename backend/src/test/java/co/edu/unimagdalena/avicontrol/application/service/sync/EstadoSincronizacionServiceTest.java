@@ -54,4 +54,25 @@ class EstadoSincronizacionServiceTest {
     assertThat(estado.modulo1().desactualizada()).isTrue();
     assertThat(estado.modulo2().desactualizada()).isFalse();
   }
+
+  @Test
+  void unaFuenteReciénSincronizadaPeroConSuUltimaEjecucionFallidaEstaDesactualizada() {
+    var registros = mock(RegistroSincronizacionRepository.class);
+    when(registros.ultimaSincronizacionExitosa(FuenteSincronizacion.MODULO_1))
+        .thenReturn(Optional.of(AHORA.minus(Duration.ofMinutes(10))));
+    when(registros.ultimaEjecucionFallo(FuenteSincronizacion.MODULO_1)).thenReturn(true);
+    when(registros.ultimaSincronizacionExitosa(FuenteSincronizacion.MODULO_2))
+        .thenReturn(Optional.of(AHORA));
+    var servicio =
+        new EstadoSincronizacionService(
+            registros, Clock.fixed(AHORA, ZoneOffset.UTC), Duration.ofHours(24));
+
+    var estado = servicio.consultar();
+
+    assertThat(estado.modulo1().desactualizada()).isTrue();
+    // Se conserva la fecha de la última sincronización exitosa para mostrarla
+    assertThat(estado.modulo1().ultimaSincronizacionExitosa())
+        .isEqualTo(AHORA.minus(Duration.ofMinutes(10)));
+    assertThat(estado.modulo2().desactualizada()).isFalse();
+  }
 }
