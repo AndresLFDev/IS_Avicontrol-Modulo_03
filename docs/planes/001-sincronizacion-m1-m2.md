@@ -122,7 +122,7 @@ La lista vacía no acredita que el lote exista en M2.
   "fechaRegistro": "2026-11-20T18:30:00Z", "fechaCorreccion": null }
 ```
 
-M3 guarda `id`, `cantidadFinalPollos`, `pesoTotalKg` y `fechaRegistro` en `resultado_final_sacrificio`. El galpón de la fila es el del lote en la copia local (no el `galponId` de M2, para no romper la clave foránea). Si el lote ya tiene un resultado `UTILIZADO` no se toca; si tiene otro sin utilizar, lo reemplaza el nuevo.
+M3 guarda `id`, `cantidadFinalPollos`, `pesoTotalKg` y `fechaRegistro` en `resultado_final_sacrificio`. El galpón de la fila es el del lote en la copia local (no el `galponId` de M2, para no romper la clave foránea). Si el lote ya tiene un resultado con otro `id`, se conserva el primero y se anota una incidencia (CU08.FR-010); si tiene el mismo `id` y está `UTILIZADO`, no se toca (CU08.FR-004).
 
 ### E. Partidas de alimento (CU09)
 

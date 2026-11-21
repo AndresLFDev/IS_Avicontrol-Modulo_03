@@ -61,8 +61,8 @@ Como Módulo 3, quiero recibir de Módulo 2 las partidas de alimento asociadas a
 
 ### Functional Requirements
 
-- **FR-001**: El sistema MUST consultar, mediante un proceso automático en segundo plano, el REST de Módulo 2 para obtener las partidas de alimento asociadas al ciclo de cada lote (contrato por confirmar, D-08).
-- **FR-002**: Por cada partida, el sistema MUST obtener y almacenar: `idPartidaOrigen`, `idLote`, `idGalpon`, `tipoAlimento`, `cantidadKg`, `precioUnitarioKgCop`, `valorImpuestoCop`, `referenciaOrigen` y la fecha y hora de sincronización.
+- **FR-001**: El sistema MUST consultar, mediante un proceso automático en segundo plano, el REST de Módulo 2 para obtener las partidas de alimento asociadas al ciclo de cada lote (contrato acordado con M2, ver el [plan 001](../../planes/001-sincronizacion-m1-m2.md)).
+- **FR-002**: Por cada partida, el sistema MUST obtener y almacenar: `idPartidaOrigen`, `idLote`, `idGalpon`, `tipoAlimento`, `cantidadKg`, `precioUnitarioKgCop`, `valorImpuestoCop`, `referenciaOrigen` y la fecha y hora de sincronización. M2 entrega una partida por suministro y por recepción; `idPartidaOrigen` lo calcula M3 de ese par (UUID determinista), y las cantidades y los precios conservan los 4 decimales de M2.
 - **FR-003**: El sistema NO DEBE calcular subtotales ni totales durante la sincronización. Almacena cantidad y precio unitario; la valorización corresponde a M3-CU03.
 - **FR-004**: El sistema NO DEBE promediar precios entre partidas. Cada tramo de cantidad conserva el precio unitario que le corresponde.
 - **FR-005**: El sistema MUST marcar como no valorizada toda partida que carezca de precio unitario aplicable, y MUST exponerla como partida pendiente para que M3-CU03 bloquee la Liquidación y la liste.

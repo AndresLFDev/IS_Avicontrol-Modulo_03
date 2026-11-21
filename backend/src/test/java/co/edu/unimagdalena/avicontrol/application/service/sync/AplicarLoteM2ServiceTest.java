@@ -137,6 +137,19 @@ class AplicarLoteM2ServiceTest {
   }
 
   @Test
+  void unSegundoResultadoDistintoParaElMismoLoteSeInformaYSeConservaElPrimero() {
+    UUID otro = UUID.fromString("99999999-9999-4999-8999-999999999999");
+    when(copia.resultadoDelLote(LOTE)).thenReturn(Optional.of(new ResultadoLocal(otro, false)));
+
+    var aplicado = aplicar(Optional.of(resultado(LOTE, 1950, "3990")), List.of(), List.of());
+
+    assertThat(aplicado.registros()).isZero();
+    assertThat(aplicado.incidencias()).hasSize(1);
+    assertThat(aplicado.incidencias().get(0)).contains(otro.toString()).contains("se conserva");
+    verify(copia, never()).guardarResultado(any(), any(), any(), eq(1950), any(), any(), any());
+  }
+
+  @Test
   void omiteUnResultadoInvalidoYLoInforma() {
     for (var invalido :
         List.of(

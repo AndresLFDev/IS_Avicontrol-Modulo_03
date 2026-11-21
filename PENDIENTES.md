@@ -12,7 +12,7 @@ Lista de tareas pendientes y acuerdos del equipo. Estado revisado el 2026-11-13.
 
 - [x] Sincronización por REST según el plan 001: CU07 con M1 (PR #50) y CU08 a CU10 con M2 más el aviso de utilización por `POST` (este cambio). Falta desplegarla con `M2_BASE_URL` y probarla con datos reales de M2 (hoy el lote `7331eec8-e447-4868-bdef-8eca3fff8d44` no tiene resultado, alimento ni medicamento en M2).
 - [ ] Decisiones D-01 a D-08 con los equipos de M1 y M2 (ver `docs/requisitos/especificacion-general.md`).
-- [ ] D-08: acordar con M2 las rutas, la autenticación y los campos de sus consultas (para M1 ya están en su acuerdo de contratos).
+- [x] D-08: resuelta el 2026-11-21. M2 documentó las rutas y los campos, y autoriza a M3 por IP (sin usuario ni clave).
 - [x] D-03: resuelta el 2026-11-21. El aviso va por REST (`POST` a M2), con respuesta idempotente, y M2 no corrige un resultado ya avisado.
 - [ ] Quitar Kafka que M3 ya no usa: la dependencia `spring-boot-starter-kafka`, `spring.kafka` en los perfiles, la sección `kafka.topicos` de `application.yml`, el servicio de `compose.yaml` y el contenedor de las pruebas de integración.
 - [ ] D-05: decidir si los costos operativos se calculan sobre el valor neto o con impuesto. M2 ya entrega el neto y el impuesto por separado; M3 guarda `valor_impuesto_cop` y no lo suma.

@@ -81,12 +81,6 @@ public class CopiaLocalM2JpaAdapter implements CopiaLocalM2Repository {
     BigDecimal peso = escala(pesoTotalKg, DECIMALES_PESO);
     Instant registro = fechaRegistro.truncatedTo(ChronoUnit.MICROS);
     var existente = resultados.findByIdLote(idLote);
-    if (existente.isPresent() && !existente.get().idResultado.equals(idResultado)) {
-      // M2 registró otro resultado para el lote y el anterior no se usó: se reemplaza
-      resultados.delete(existente.get());
-      resultados.flush();
-      existente = Optional.empty();
-    }
     boolean nuevo = existente.isEmpty();
     var resultado = existente.orElseGet(ResultadoFinalSacrificioEntity::new);
     if (!nuevo

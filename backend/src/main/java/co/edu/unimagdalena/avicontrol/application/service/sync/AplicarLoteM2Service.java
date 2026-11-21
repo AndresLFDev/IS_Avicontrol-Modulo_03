@@ -81,6 +81,19 @@ public class AplicarLoteM2Service {
       return 0;
     }
     var local = copia.resultadoDelLote(lote.idLote());
+    if (local.isPresent() && !local.get().idResultado().equals(r.id())) {
+      // CU08.FR-010: un segundo resultado para el mismo lote es una incidencia; se conserva el
+      // primero
+      incidencias.add(
+          "Resultado de sacrificio del lote "
+              + lote.idLote()
+              + " omitido: M2 entrega el resultado "
+              + r.id()
+              + " pero ya hay otro sincronizado ("
+              + local.get().idResultado()
+              + "); se conserva el anterior");
+      return 0;
+    }
     if (local.isPresent() && local.get().utilizado()) {
       return 0; // ya se liquidó con él y M2 bloquea su corrección: no se toca
     }

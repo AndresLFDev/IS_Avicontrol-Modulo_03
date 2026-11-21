@@ -148,7 +148,7 @@ SELECT liq.id_liquidacion, l.nombre AS lote, liq.estado, liq.precio_kg_cop,
 ```sql
 -- 10. Aviso de utilización para M2
 -- Al generar una liquidación con resultado de sacrificio, el resultado pasa a UTILIZADO y se
--- crea un aviso PENDIENTE (M2 lo recibiría por el canal que se acuerde; ese envío aún no está implementado).
+-- crea un aviso PENDIENTE (con M2_BASE_URL la tarea programada lo envía a M2 por REST; en local sigue PENDIENTE).
 -- Si se anula y se vuelve a liquidar, el aviso original se conserva y no se duplica.
 -- En siniestro total no hay resultado, así que no se crea aviso.
 SELECT r.id_resultado, l.nombre AS lote, r.estado_utilizacion,

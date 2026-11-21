@@ -23,8 +23,8 @@ public interface CopiaLocalM2Repository {
   Optional<ResultadoLocal> resultadoDelLote(UUID idLote);
 
   /**
-   * Inserta o actualiza el resultado del lote (uno por lote). Si el lote tenía otro resultado sin
-   * utilizar, lo reemplaza. Conserva el estado de utilización.
+   * Inserta o actualiza el resultado del lote (uno por lote, por su id). Conserva el estado de
+   * utilización. Quien llama no lo usa con otro id si el lote ya tiene resultado (CU08.FR-010).
    */
   void guardarResultado(
       UUID idResultado,

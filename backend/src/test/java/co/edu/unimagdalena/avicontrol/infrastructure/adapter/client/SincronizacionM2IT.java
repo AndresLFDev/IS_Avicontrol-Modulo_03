@@ -268,6 +268,26 @@ class SincronizacionM2IT {
   }
 
   @Test
+  void unSegundoResultadoDistintoParaElLoteSeInformaYSeConservaElPrimero() {
+    sincronizar.sincronizar();
+    M2.conResultado(
+        M2Simulado.LOTE, "99999999-9999-4999-8999-999999999999", 1500, "3000.00"); // otro id
+
+    var resumen = sincronizar.sincronizar();
+
+    assertThat(resumen.exitosa()).isTrue();
+    assertThat(resumen.incidencias()).hasSize(1);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT id_resultado::text FROM resultado_final_sacrificio", String.class))
+        .isEqualTo(RESULTADO.toString());
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT cantidad_final_pollos FROM resultado_final_sacrificio", Integer.class))
+        .isEqualTo(1974);
+  }
+
+  @Test
   void soloConsultaLosLotesConAlertaDeVaciado() {
     sincronizar.sincronizar();
 

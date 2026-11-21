@@ -13,8 +13,9 @@ Hay un caso de prueba por cada caso de uso implementado:
 | [`m3-cu04-anular-liquidacion.md`](../pruebas/casos/m3-cu04-anular-liquidacion.md) | M3-CU04 Anular liquidación | [003](../planes/003-gestion-liquidaciones.md) |
 | [`m3-cu05-desglose-ventas-gastos.md`](../pruebas/casos/m3-cu05-desglose-ventas-gastos.md) | M3-CU05 Desglose de ventas y gastos | [004](../planes/004-reportes-historial.md) |
 | [`m3-cu06-historial-liquidaciones.md`](../pruebas/casos/m3-cu06-historial-liquidaciones.md) | M3-CU06 Historial de liquidaciones | [004](../planes/004-reportes-historial.md) |
+| [`m3-cu07-a-cu10-sincronizacion.md`](../pruebas/casos/m3-cu07-a-cu10-sincronizacion.md) | M3-CU07 a CU10 Sincronización con M1 y M2 y aviso de utilización | [001](../planes/001-sincronizacion-m1-m2.md) |
 
-**Lo que no se puede probar todavía.** Los casos de uso CU07 a CU10 (consulta REST a Módulo 1 y Módulo 2) y la publicación de avisos de utilización a Módulo 2 no están implementados: el backend no tiene clientes REST ni tarea de sincronización. La app trabaja solo con los datos del seed del perfil `dev`, y la tabla `registro_sincronizacion` no recibe filas nuevas al usar la app.
+**Lo que se prueba distinto.** La sincronización con M1 y M2 (CU07 a CU10) y el aviso de utilización no tienen pantalla: se comprueban con la base y con `GET /api/v1/sincronizacion/estado`. M1 responde desde cualquier red, pero M2 solo acepta la IP de la EC2 de M3, así que el caso [`m3-cu07-a-cu10-sincronizacion.md`](../pruebas/casos/m3-cu07-a-cu10-sincronizacion.md) se ejecuta en el despliegue de AWS. En local, con el perfil `dev`, `M1_BASE_URL` y `M2_BASE_URL` vacías no se consulta a nadie y la app trabaja con los datos del seed.
 
 ## 2. Preparación del entorno
 
