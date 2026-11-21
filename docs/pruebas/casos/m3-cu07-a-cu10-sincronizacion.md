@@ -37,7 +37,7 @@ This test case verifies that **la sincronización con Módulo 1 y Módulo 2** (t
 
 ##### Test Case Limitations
 * **Solo se puede probar contra los módulos reales desde el servidor de AWS.** M2 solo acepta peticiones de la IP `52.15.95.91` (la de la EC2 de M3): desde un equipo local responde 403. En local, con `M2_BASE_URL` vacío, M3 no consulta a M2.
-* Las secciones 2 y 3 necesitan que **M2 tenga registrado un ciclo completo** (resultado final, suministros de alimento y consumos de medicamento) para un lote que exista en M1 y ya tenga alerta de vaciado. Al 2026-11-21 M2 no tiene datos para el lote `7331eec8-e447-4868-bdef-8eca3fff8d44`.
+* Las secciones 2 y 3 necesitan que **M2 tenga registrado un ciclo completo** (resultado final, suministros de alimento y consumos de medicamento) para un lote que exista en M1 y ya tenga alerta de vaciado. Al 2026-11-21 la base principal de M2 no tiene ningún ciclo completo; el de `7331eec8-e447-4868-bdef-8eca3fff8d44` existe solo en su base DEMO (`/demo/api/integracion/modulo3`), que M2 mantiene hasta la presentación.
 * No hay pantalla de la sincronización. Se comprueba con la base, con `GET /api/v1/sincronizacion/estado` y con la lista de lotes.
 * El ciclo es de 5 minutos (`SYNC_M1_INTERVALO`, `SYNC_M2_INTERVALO`) y los avisos se reintentan cada minuto. Los pasos indican cuánto esperar.
 
@@ -55,34 +55,34 @@ This test case verifies that **la sincronización con Módulo 1 y Módulo 2** (t
 
 #### Test Execution Flow  *(mandatory)*
 
-**Última ejecución** : sin ejecución manual todavía (el 2026-11-21 M2 aún no tiene datos del lote de prueba). La lógica de todos los pasos está cubierta por pruebas automáticas contra PostgreSQL real y un M1 y un M2 simulados con los JSON que ellos documentan: `SincronizacionM1IT` (8 pruebas), `SincronizacionM2IT` (15 pruebas), `ClienteM1RestTest`, `ClienteM2RestTest`, `AplicarLoteM2ServiceTest`, `SyncModulo2ServiceTest` y `PublicarAvisosM2ServiceTest`. La V4 se aplicó además sobre una copia de la base de AWS con 34 lotes y 13 liquidaciones: las sumas de verificación de cantidades y precios no cambiaron.
+**Última ejecución** : 2026-11-21, en AWS, contra la **base DEMO de M2** (`https://3.21.155.197/demo/api/integracion/modulo3`) con datos simulados por M2 para el lote `7331eec8-e447-4868-bdef-8eca3fff8d44` (1.000 pollos y 2.500 kg; alimento de 40 kg a 2.500 y 20 kg a 3.000 con 5 % de impuesto; medicamento de 100 ml a 50). Resultado: pasos 1 a 3, 5 a 8, 10, 11, 13 y 15 correctos. Se generó la Liquidación 1 con precio `7000` (venta 17.500.000, costos 5.165.000, utilidad 12.335.000); el aviso quedó `ENTREGADO` al primer intento y M2 marca el resultado `UTILIZADO`. **Pendiente**: repetir contra la base principal de M2 (ruta sin `/demo/`) con un lote real de M1, y los pasos 4, 9, 12, 14 y 16 a 19 (repeticiones, bloqueo de corrección en M2 y fallos del otro módulo). La lógica de todos los pasos está cubierta por pruebas automáticas contra PostgreSQL real y un M1 y un M2 simulados con los JSON que ellos documentan: `SincronizacionM1IT` (8 pruebas), `SincronizacionM2IT` (15 pruebas), `ClienteM1RestTest`, `ClienteM2RestTest`, `AplicarLoteM2ServiceTest`, `SyncModulo2ServiceTest` y `PublicarAvisosM2ServiceTest`. La V4 se aplicó además sobre una copia de la base de AWS con 34 lotes y 13 liquidaciones: las sumas de verificación de cantidades y precios no cambiaron.
 
 ##### Section 1: Módulo 1 (CU07)
 | Step # | Step Description | Path & Action | Test Data | Expected Results | Pass/Fail | Comments |
 | :---: | ------ | ------ | ------ | ------ | :---: | ------ |
-| 1 | Esperar la primera sincronización | Esperar 1 minuto tras arrancar el backend y ejecutar la consulta 13b | N/A | Hay una fila `MODULO_1` con resultado `EXITOSA`, `registros_actualizados` mayor que 0 y `descripcion_error` vacía (o con los datos omitidos) | [ ] | Automatizado: `SincronizacionM1IT.llenaLaCopiaLocal...` |
-| 2 | Ver los lotes de M1 en la app | Abrir <http://52.15.95.91>, lista de lotes | N/A | Aparecen los lotes que trae M1: los vaciados como "Por liquidar" y los de galpones en aislamiento, productivos o en cosecha, en su etapa | [ ] | Automatizado: `elLoteDesvinculadoApareceComoPorLiquidar...` |
-| 3 | Revisar RT-09 | Abrir <http://52.15.95.91/api/v1/sincronizacion/estado> | N/A | `modulo1.desactualizada` es `false` y trae la fecha de la última sincronización | [ ] | Consulta 13c devuelve la misma fecha |
+| 1 | Esperar la primera sincronización | Esperar 1 minuto tras arrancar el backend y ejecutar la consulta 13b | N/A | Hay una fila `MODULO_1` con resultado `EXITOSA`, `registros_actualizados` mayor que 0 y `descripcion_error` vacía (o con los datos omitidos) | [x] | Automatizado: `SincronizacionM1IT.llenaLaCopiaLocal...` |
+| 2 | Ver los lotes de M1 en la app | Abrir <http://52.15.95.91>, lista de lotes | N/A | Aparecen los lotes que trae M1: los vaciados como "Por liquidar" y los de galpones en aislamiento, productivos o en cosecha, en su etapa | [x] | Automatizado: `elLoteDesvinculadoApareceComoPorLiquidar...` |
+| 3 | Revisar RT-09 | Abrir <http://52.15.95.91/api/v1/sincronizacion/estado> | N/A | `modulo1.desactualizada` es `false` y trae la fecha de la última sincronización | [x] | Consulta 13c devuelve la misma fecha |
 | 4 | Comprobar que repetir no duplica | Esperar un ciclo (5 min) y ejecutar las consultas de conteo de la consulta 13b | N/A | Sube el número de filas de la bitácora, pero no el de lotes ni el de alertas | [ ] | Automatizado: `repetirLaSincronizacionNoDuplica...` |
 
 ##### Section 2: Módulo 2 (CU08, CU09, CU10)
 | Step # | Step Description | Path & Action | Test Data | Expected Results | Pass/Fail | Comments |
 | :---: | ------ | ------ | ------ | ------ | :---: | ------ |
-| 5 | Preparar los datos en M2 | En M2, con sus pantallas: registrar para un lote de M1 con alerta de vaciado el resultado final, al menos un suministro de alimento (con dos recepciones de precio distinto, si se puede) y un consumo de medicamento | Lote de M1 que esté "Por liquidar" | M2 devuelve los datos en sus tres consultas | [ ] | No insertar datos directo en la base de M2 |
-| 6 | Esperar la sincronización con M2 | Esperar hasta 5 minutos y ejecutar la consulta 13b | N/A | Hay una fila `MODULO_2` `EXITOSA` con `registros_actualizados` igual a 1 resultado + partidas + consumos + tramos | [ ] | Automatizado: `llenaLaCopiaLocalConLosDatosDeM2` |
-| 7 | Comprobar lo guardado | Ejecutar la consulta 14 | `<id del lote>` | Un resultado, una partida de alimento por cada suministro y recepción (no consolidadas) y los tramos de medicamento con su recepción | [ ] | Automatizado: ídem |
-| 8 | Comprobar la precisión | Ejecutar la consulta 15 | N/A | Los precios y las cantidades conservan los 4 decimales de M2 (por ejemplo `0.0333`, no `0.03`) | [ ] | Automatizado: `guardaLosPreciosYLasCantidadesConLos4Decimales...` |
+| 5 | Preparar los datos en M2 | En M2, con sus pantallas: registrar para un lote de M1 con alerta de vaciado el resultado final, al menos un suministro de alimento (con dos recepciones de precio distinto, si se puede) y un consumo de medicamento | Lote de M1 que esté "Por liquidar" | M2 devuelve los datos en sus tres consultas | [x] | No insertar datos directo en la base de M2. Ejecutado con la base DEMO de M2 (2026-11-21) |
+| 6 | Esperar la sincronización con M2 | Esperar hasta 5 minutos y ejecutar la consulta 13b | N/A | Hay una fila `MODULO_2` `EXITOSA` con `registros_actualizados` igual a 1 resultado + partidas + consumos + tramos | [x] | Automatizado: `llenaLaCopiaLocalConLosDatosDeM2` |
+| 7 | Comprobar lo guardado | Ejecutar la consulta 14 | `<id del lote>` | Un resultado, una partida de alimento por cada suministro y recepción (no consolidadas) y los tramos de medicamento con su recepción | [x] | Automatizado: ídem |
+| 8 | Comprobar la precisión | Ejecutar la consulta 15 | N/A | Los precios y las cantidades conservan los 4 decimales de M2 (por ejemplo `0.0333`, no `0.03`) | [x] | Consulta 15: las siete columnas dicen 18,4; la consulta 14 mostró `40.0000` y `2500.0000` | Automatizado: `guardaLosPreciosYLasCantidadesConLos4Decimales...` |
 | 9 | Repetir sin cambios | Esperar otro ciclo y ejecutar la consulta 14 | N/A | Las mismas filas y la misma `fecha_hora_sync` | [ ] | Automatizado: `repetirNoDuplicaNiRenuevaLaFechaDeSincronizacion...` |
-| 10 | Revisar RT-09 | Abrir `/api/v1/sincronizacion/estado` | N/A | `modulo2.desactualizada` es `false` | [ ] | |
+| 10 | Revisar RT-09 | Abrir `/api/v1/sincronizacion/estado` | N/A | `modulo2.desactualizada` es `false` | [x] | |
 
 ##### Section 3: Liquidación con datos de M2 y aviso de utilización
 | Step # | Step Description | Path & Action | Test Data | Expected Results | Pass/Fail | Comments |
 | :---: | ------ | ------ | ------ | ------ | :---: | ------ |
-| 11 | Generar la Liquidación | Con el caso TC-M3-CU03, generar la Liquidación del lote con un precio por kg | Precio `7000` | La vista previa y la Liquidación usan las cantidades y precios de M2 (costos de alimento y medicina con los 4 decimales de M2) | [ ] | Automatizado: `laLiquidacionSeCalculaConLosPreciosCompletosDeM2` |
+| 11 | Generar la Liquidación | Con el caso TC-M3-CU03, generar la Liquidación del lote con un precio por kg | Precio `7000` | La vista previa y la Liquidación usan las cantidades y precios de M2 (costos de alimento y medicina con los 4 decimales de M2) | [x] | Lote `7331eec8`: alimento 160.000, medicamento 5.000; venta 17.500.000 y utilidad 12.335.000 | Automatizado: `laLiquidacionSeCalculaConLosPreciosCompletosDeM2` |
 | 12 | Revisar el aviso pendiente | Ejecutar la consulta 16 inmediatamente | N/A | El resultado está `UTILIZADO` y el aviso `PENDIENTE` o ya `ENTREGADO` | [ ] | |
-| 13 | Esperar el envío | Esperar 1 minuto y ejecutar la consulta 16 | N/A | El aviso queda `ENTREGADO`, con `intentos` igual a 1 | [ ] | Automatizado: `despuesDeLiquidarElAvisoSaleUnaSolaVez...` |
+| 13 | Esperar el envío | Esperar 1 minuto y ejecutar la consulta 16 | N/A | El aviso queda `ENTREGADO`, con `intentos` igual a 1 | [x] | M2 DEMO devuelve el resultado `UTILIZADO` | Automatizado: `despuesDeLiquidarElAvisoSaleUnaSolaVez...` |
 | 14 | Comprobar que M2 bloqueó la corrección | En M2, intentar corregir ese resultado final | N/A | M2 rechaza la corrección | [ ] | Es una comprobación del lado de M2 |
-| 15 | Comprobar que no se vuelve a consultar | Ejecutar la consulta 13b tras otro ciclo | N/A | La sincronización con M2 sigue `EXITOSA` y no cambia el resultado ni las partidas del lote ya liquidado | [ ] | Automatizado: ídem |
+| 15 | Comprobar que no se vuelve a consultar | Ejecutar la consulta 13b tras otro ciclo | N/A | La sincronización con M2 sigue `EXITOSA` y no cambia el resultado ni las partidas del lote ya liquidado | [x] | Tras liquidar (05:55) hubo 4 ciclos con M2 `EXITOSA` y 0 registros; `fecha_hora_sync` del resultado y las partidas sigue en 05:51:58 | Automatizado: ídem |
 
 ##### Section 4: Fallos de los otros módulos
 | Step # | Step Description | Path & Action | Test Data | Expected Results | Pass/Fail | Comments |
