@@ -10,7 +10,7 @@ Lista de tareas pendientes y acuerdos del equipo. Estado revisado el 2026-11-13.
 
 ### Integración con Módulo 1 y Módulo 2 (M3-CU07 a M3-CU10)
 
-- [x] Sincronización por REST según el plan 001: CU07 con M1 (PR #50) y CU08 a CU10 con M2 más el aviso de utilización por `POST` (este cambio). Falta desplegarla con `M2_BASE_URL` y probarla con datos reales de M2 (hoy el lote `7331eec8-e447-4868-bdef-8eca3fff8d44` no tiene resultado, alimento ni medicamento en M2).
+- [x] Sincronización por REST según el plan 001: CU07 con M1 (PR #50) y CU08 a CU10 con M2 más el aviso de utilización por `POST` (este cambio). Desplegada en AWS y probada el 2026-11-21 de punta a punta con la base DEMO de M2 (lote `7331eec8-e447-4868-bdef-8eca3fff8d44`: Liquidación generada y aviso entregado). Falta repetir la prueba con la base principal de M2 y un lote real de M1: M2 registra el ciclo cuando M1 prepare el lote y M3 cambia `M2_BASE_URL` a la ruta sin `/demo/`.
 - [ ] Decisiones D-01 a D-08 con los equipos de M1 y M2 (ver `docs/requisitos/especificacion-general.md`).
 - [x] D-08: resuelta el 2026-11-21. M2 documentó las rutas y los campos, y autoriza a M3 por IP (sin usuario ni clave).
 - [x] D-03: resuelta el 2026-11-21. El aviso va por REST (`POST` a M2), con respuesta idempotente, y M2 no corrige un resultado ya avisado.
