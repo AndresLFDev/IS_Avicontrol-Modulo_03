@@ -72,7 +72,7 @@ Como administrador financiero, quiero generar la Liquidación económica definit
    - **Then** el sistema crea la nueva Liquidación en estado `ACTIVA` y conserva la anterior en estado `ANULADA` para auditoría
 
 10. **Scenario**: Indisponibilidad temporal de los módulos de origen
-    - **Given** Módulo 1 o Módulo 2 no publican eventos o el broker no está disponible, y M3 cuenta con los datos locales sincronizados requeridos para el lote
+    - **Given** Módulo 1 o Módulo 2 no están disponibles, y M3 cuenta con los datos locales sincronizados requeridos para el lote
     - **When** el administrador solicita generar la Liquidación
     - **Then** el sistema genera la Liquidación usando esos datos, conserva la fecha y hora de sincronización de cada fuente en el snapshot financiero y no requiere comunicación en vivo con los módulos de origen
 
@@ -139,7 +139,7 @@ Como administrador financiero, quiero generar la Liquidación económica definit
 ### Key Entities
 
 - **Liquidacion**: Resultado financiero consolidado del lote y único Documento Financiero del módulo. Atributos clave: `idLiquidacion`, `idLote`, `idGalpon`, `idResultadoSacrificio` (nulo únicamente en siniestro total), `pollosVendidos` (origen M2; 0 en siniestro total), `pesoTotalKg` (origen M2; 0 en siniestro total), `pesoPromedioKg` (calculado, solo presentación), `precioKgCop` (ingresado; nulo en siniestro total), `ventaBrutaCop`, `mortalidadAves`, `porcentajeMortalidad`, `costosOperativosCop`, `utilidadNetaCop`, `estado` (`ACTIVA` | `ANULADA`), `fechaHoraGeneracion`, `usuarioResponsable`.
-- **ResultadoFinalSacrificio**: Resultado operativo originado en Módulo 2 y recibido por M3 como evento Kafka en su copia local (M3-CU08). Atributos sincronizados: `idResultado`, `idLote`, `idGalpon`, `cantidadFinalPollos`, `pesoTotalKg`, `fechaRegistro`, `fechaHoraSincronizacion`, `estadoUtilizacionLocal`.
+- **ResultadoFinalSacrificio**: Resultado operativo originado en Módulo 2 y sincronizado por M3 desde el REST de Módulo 2 en su copia local (M3-CU08). Atributos sincronizados: `idResultado`, `idLote`, `idGalpon`, `cantidadFinalPollos`, `pesoTotalKg`, `fechaRegistro`, `fechaHoraSincronizacion`, `estadoUtilizacionLocal`.
 - **PartidaCostoLote**: Partida de costo sincronizada y valorizada asociada al ciclo del lote. Atributos: `idPartida`, `idLote`, `categoria` (`ALIMENTO` | `MEDICINA` | `POBLACION`), `concepto`, `cantidad`, `unidadMedida`, `precioUnitarioCop`, `subtotalCop`, `fuenteOrigen`, `referenciaOrigen`.
 - **SnapshotDatosOrigen**: Datos sincronizados utilizados para una Liquidación. Atributos: `idLiquidacion`, `idLote`, `fuente` (`MODULO_1` | `MODULO_2`), `fechaHoraSincronizacion` y referencias a las poblaciones, al resultado de sacrificio y a las partidas de costo empleadas.
 - **AlertaVaciadoSanitario**: Evento registrado por Módulo 1 que conserva `idAlerta`, `idGalpon`, `idLote` y `fechaHoraEvento` después de desvincular el lote del galpón; es la referencia que identifica al lote liquidable.

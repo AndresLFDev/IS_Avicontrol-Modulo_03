@@ -1,8 +1,8 @@
 # Implementation Plan: Sincronización de Datos Locales (M1 y M2)
 
 **Date**: 2026-09-28  
-**Actualizado**: 2026-10-23  
-**Arquitectura, DDL y reglas de consumo**: [general.md](../arquitectura/general.md)  
+**Actualizado**: 2026-11-20 (SC-06: la integración pasa de eventos Kafka a consultas REST)  
+**Arquitectura, DDL y reglas de consulta**: [general.md](../arquitectura/general.md)  
 **Specs**:
 - [m3-cu07-consultar-galpon-lote-m1](../features/m3-cu07-consultar-galpon-lote-m1/spec.md) – Consultar Galpón y Lote al M1  
 - [m3-cu08-consultar-resultado-sacrificio-m2](../features/m3-cu08-consultar-resultado-sacrificio-m2/spec.md) – Consultar Resultado Final de Sacrificio al M2  
@@ -11,60 +11,102 @@
 
 ## Summary
 
-Este subsistema mantiene la **copia local sincronizada** de M3 consumiendo los eventos que Módulo 1 (galpones, lotes y alertas de vaciado sanitario) y Módulo 2 (resultados finales de sacrificio, partidas de alimento y consumos de medicamento con sus tramos por recepción) publican en **Apache Kafka**. El procesamiento es idempotente, cada evento queda en la bitácora `registro_sincronizacion` y el aviso de utilización del resultado de sacrificio se publica hacia Módulo 2 con el patrón *outbox*.
+Este subsistema mantiene la **copia local sincronizada** de M3 consultando por **REST** a Módulo 1 (galpones, lotes y, derivada de ellos, la alerta de vaciado sanitario) y a Módulo 2 (resultados finales de sacrificio, partidas de alimento y consumos de medicamento con sus tramos por recepción). Una tarea programada hace las consultas al arrancar y cada cierto intervalo; la lista de lotes y la generación de Liquidaciones solo leen la copia local. Cada ejecución queda en la bitácora `registro_sincronizacion`. El aviso de utilización del resultado de sacrificio se entrega a Módulo 2 con el patrón *outbox*.
 
-M3 no hace llamadas REST a M1 ni a M2. Los tópicos, reglas de consumo, reintentos y DLT están en la [arquitectura general](../arquitectura/general.md#integración-con-módulo-1-y-módulo-2-apache-kafka).
+**Por qué REST y no Kafka.** Verificado en los repositorios y servicios desplegados de los otros módulos (noviembre de 2026): M1 no publica eventos (su Kafka es solo entre M2 y M1) y expone el REST de consulta de su [acuerdo de contratos](https://github.com/AviControl-org/AVICONTROL/blob/develop/avicontrol/docs/plan-general/acuerdo-contratos-entre-modulos.md); M2 no publica nada hacia M3 y expone REST. Ver la solicitud SC-06 en el [control de cambios](../proceso/control-cambios.md).
 
 ## Technical Context
 
 - **Language/Version**: Java 21 (LTS)
-- **Primary Dependencies**: Spring Boot 4.1.x, Spring Kafka, Spring Data JPA, Jakarta Validation, `@Scheduled` (solo para publicar avisos pendientes)
+- **Primary Dependencies**: Spring Boot 4.1.x, `RestClient` (Spring Web), Spring Data JPA, Jakarta Validation, `@Scheduled`
 - **Storage**: PostgreSQL, migraciones Flyway `V1__create_sync_tables.sql` y `V2__create_partidas_tables.sql` (DDL en la arquitectura general)
-- **Testing**: JUnit 5 y Mockito (servicios), Spring Boot Test + Testcontainers con PostgreSQL y Kafka (consumidores y productor)
+- **Testing**: JUnit 5 y Mockito (servicios), servidor HTTP simulado con los JSON del acuerdo (adaptadores REST), Spring Boot Test + Testcontainers con PostgreSQL
 - **Target Platform**: JVM 21 / Docker
 - **Project Type**: Backend service (capa de sincronización e integración)
-- **Performance Goals**: Procesamiento de un evento < 1 s; reintentos con backoff ante errores técnicos
+- **Configuración**: `M1_BASE_URL` (por ejemplo `http://18.227.58.143/api/v1`), `SYNC_M1_INTERVALO` (por defecto `PT5M`); para M2, `M2_BASE_URL`, `M2_USUARIO` y `M2_CLAVE`. Ninguna va en el código.
+- **Performance Goals**: una sincronización completa de M1 con pocos galpones en menos de 10 s; tiempos máximos de 2 s de conexión y 5 s de lectura por consulta, sin reintentos dentro de una misma consulta (el siguiente ciclo reintenta)
 
 ---
 
-## Contratos de Eventos Kafka
+## Contratos con Módulo 1 (REST, según su acuerdo)
 
-Todos los eventos usan el sobre `header` + `payload` de la arquitectura general. Aquí se muestra solo el `payload`. Los nombres de campo deben confirmarse con M1 y M2 (D-08); el consumidor traduce cualquier diferencia de nombres o de grafía (D-07) a los DTOs de `domain/port/in/dto/evento/`.
+Solo lectura, sin autenticación, base `/api/v1`. Los nombres de campo son los de M1 y no se traducen en el contrato: el adaptador de M3 los traduce a los de la copia local (`capacidad` → `aforo_maximo`, `loteActivo` → lote `ACTIVO`, `costoTotal` → `costo_total_cop`). Los errores usan RFC 9457 (`application/problem+json`) con un `code`.
 
-### A. `avicontrol.m1.galpones` — `GalponActualizadoEvent` (CU07)
+### A. `GET /api/v1/galpones?page={n}` — lista de galpones (CU07)
+
+Tamaño de página fijo de 10 (no existe `size`). Se recorren las páginas hasta `totalPaginas`.
 
 ```json
 {
-  "idGalpon": "123e4567-e89b-12d3-a456-426614174000",
+  "contenido": [
+    { "id": "550e8400-e29b-41d4-a716-446655440000", "nombre": "Galpón Norte", "capacidad": 1500, "estado": "PRODUCTIVO" }
+  ],
+  "pagina": 1,
+  "tamanio": 10,
+  "totalElementos": 1,
+  "totalPaginas": 1,
+  "sinCoincidencias": false
+}
+```
+
+### B. `GET /api/v1/galpones/{galponId}` — galpón y su lote activo (CU07)
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
   "nombre": "Galpón Norte",
-  "aforoMaximo": 10000,
+  "capacidad": 1500,
   "estado": "PRODUCTIVO",
-  "loteVinculado": {
-    "idLote": "98765432-e89b-12d3-a456-426614174000",
-    "nombre": "Lote L-2026-A",
-    "estado": "ACTIVO",
-    "fechaIngreso": "2026-08-01",
-    "poblacionInicial": 9000,
-    "poblacionActual": 8500,
-    "costoTotalCop": 18000000
+  "loteActivo": {
+    "id": "2fc03a21-84c4-4c83-bb15-6607bb75cb90",
+    "nombre": "Lote A1",
+    "poblacionInicial": 1000,
+    "poblacionActual": 975,
+    "fechaIngreso": "2026-09-15",
+    "edadDias": 21,
+    "costoTotal": 5000000
   }
 }
 ```
 
-`loteVinculado` es `null` cuando el galpón no tiene lote (`DISPONIBLE`, `MANTENIMIENTO`). Un lote desvinculado conserva su fila local: no se borra al recibir un evento del galpón sin lote.
+Un galpón sin lote activo responde `200` **sin** el campo `loteActivo` (nunca `null`). `mensaje` e `incidencias[{codigo, mensaje}]` son informativos, no errores.
 
-### B. `avicontrol.m1.alertas-vaciado` — `AlertaVaciadoSanitarioEvent` (CU07)
+### C. `GET /api/v1/galpones/{galponId}/lotes` — historial de lotes (CU07)
 
 ```json
 {
-  "idAlerta": "c0ffee00-e89b-12d3-a456-426614174000",
-  "idGalpon": "123e4567-e89b-12d3-a456-426614174000",
-  "idLote": "98765432-e89b-12d3-a456-426614174000",
-  "fechaHoraEvento": "2026-09-26T07:15:00-05:00"
+  "galponId": "550e8400-e29b-41d4-a716-446655440000",
+  "loteActivo": { "id": "…", "nombre": "…", "poblacionInicial": 1000, "poblacionActual": 975, "fechaIngreso": "2026-09-15", "edadDias": 21, "costoTotal": 5000000 },
+  "lotesAnteriores": [
+    { "id": "7331eec8-e447-4868-bdef-8eca3fff8d44", "nombre": "lote demo", "poblacionInicial": 2000, "poblacionActual": 1974, "fechaIngreso": "2026-11-18", "edadDias": 2, "costoTotal": 5000000 }
+  ]
 }
 ```
 
-### C. `avicontrol.m2.resultados-sacrificio` — `ResultadoSacrificioPublicadoEvent` (CU08)
+Según el acuerdo de M1, un lote deja de ser activo únicamente cuando M1 acepta el vaciado sanitario. Por eso **aparecer en `lotesAnteriores` equivale a tener alerta de vaciado**: M3 deriva la alerta (ver la regla de derivación abajo). M1 no expone el id ni la hora de la alerta.
+
+### Errores de M1
+
+| HTTP | `code` | Caso | Tratamiento en M3 |
+|---|---|---|---|
+| 400 | `PARAMETRO_INVALIDO` | `page` o `galponId` inválidos | Ejecución `FALLIDA`; no se reintenta dentro del ciclo |
+| 404 | `GALPON_NO_ENCONTRADO` | El galpón ya no existe en M1 | Se omite ese galpón; la copia local no se borra |
+| 500 | `ERROR_CONSULTA` | Error técnico de M1 | Ejecución `FALLIDA`; reintenta el siguiente ciclo |
+| — | — | M1 no responde (tiempo agotado) | Ejecución `FALLIDA`; la copia local queda intacta |
+
+### Reglas de derivación
+
+- **Estado del lote**: `ACTIVO` si viene como `loteActivo`; `DESVINCULADO` si viene en `lotesAnteriores`.
+- **Alerta de vaciado**: por cada lote en `lotesAnteriores` que no tenga alerta, se inserta una con `id_alerta` determinista (UUID calculado del `id` del lote), `fecha_hora_evento` = momento en que M3 la detectó y `id_registro_sincronizacion` = la ejecución actual. Las alertas son inmutables. Sin migración: usa las columnas existentes.
+- **Datos inválidos** (CU07.FR-010, FR-011): un lote sin `poblacionInicial`, con `costoTotal <= 0` o con `poblacionActual > poblacionInicial` se omite y se anota en `descripcion_error`; no sobrescribe la copia local.
+
+---
+
+## Contratos con Módulo 2 (REST, por confirmar — D-08)
+
+M2 todavía no publica para M3. M3 propone consultar por lote, solo los lotes con alerta de vaciado y sin Liquidación activa. Los `payload` siguientes son la **forma que M3 necesita**; los endpoints, la autenticación (Basic hoy) y los campos que hoy faltan se acuerdan con M2. Endpoints actuales de M2 que cubren parte de esto: `GET /api/ordenes-sacrificio/{ordenId}/resultados`, `GET /api/lotes/{loteId}/consumos-medicamento` y `GET /api/lotes/{loteId}/alimento-requerido`.
+
+### D. Resultado de sacrificio (CU08)
 
 ```json
 {
@@ -77,7 +119,7 @@ Todos los eventos usan el sobre `header` + `payload` de la arquitectura general.
 }
 ```
 
-### D. `avicontrol.m2.partidas-alimento` — `PartidaAlimentoPublicadaEvent` (CU09)
+### E. Partidas de alimento (CU09)
 
 ```json
 {
@@ -92,9 +134,9 @@ Todos los eventos usan el sobre `header` + `payload` de la arquitectura general.
 }
 ```
 
-`precioUnitarioKgCop` puede llegar `null`: la partida se guarda con `estado_valorizacion = 'PENDIENTE_PRECIO'` (CU09.FR-005).
+`precioUnitarioKgCop` puede faltar: la partida se guarda con `estado_valorizacion = 'PENDIENTE_PRECIO'` (CU09.FR-005).
 
-### E. `avicontrol.m2.consumos-medicamento` — `ConsumoMedicamentoPublicadoEvent` (CU10)
+### F. Consumos de medicamento (CU10)
 
 ```json
 {
@@ -112,9 +154,9 @@ Todos los eventos usan el sobre `header` + `payload` de la arquitectura general.
 }
 ```
 
-M2 entrega cantidad y precio por tramo, nunca un total en pesos (RT-07). Un tramo con `precioUnitarioBaseCop = null` se guarda `PENDIENTE_PRECIO` (CU10.FR-006). Al reprocesar un consumo se reemplazan sus tramos por los del evento.
+M2 entrega cantidad y precio por tramo, nunca un total en pesos (RT-07). Un tramo sin `precioUnitarioBaseCop` se guarda `PENDIENTE_PRECIO` (CU10.FR-006). Al reprocesar un consumo se reemplazan sus tramos.
 
-### F. `avicontrol.m3.avisos-utilizacion` — `ResultadoUtilizadoEvent` (CU08, saliente)
+### G. Aviso de utilización (CU08, saliente M3 → M2)
 
 ```json
 {
@@ -125,156 +167,110 @@ M2 entrega cantidad y precio por tramo, nunca un total en pesos (RT-07). Un tram
 }
 ```
 
-### Validaciones de contenido (evento `FALLIDA`, sin reintento)
+El canal (REST con un `POST` a M2, o un tópico de Kafka alojado por M2) se acuerda con M2 (D-03). M1 no participa. Hoy el consumidor de M2 espera el tópico `modulo3.resultado-sacrificio-utilizado.v1` con el sobre `eventId`, `eventType`, `eventVersion`, `aggregateId` y `payload{resultadoId, loteId}`; si el canal es Kafka, M3 enviará exactamente ese sobre.
 
-| Evento | Se rechaza si | Spec |
+### Validaciones de contenido (ejecución `FALLIDA` o elemento omitido, sin reintento)
+
+| Dato | Se rechaza si | Spec |
 |---|---|---|
-| Galpón | Falta `idGalpon` o `estado`; `estado` fuera del catálogo `EstadoGalpon`; lote sin `poblacionInicial`, con `costoTotalCop <= 0` o `poblacionActual > poblacionInicial` | CU07.FR-010, FR-011 |
-| Alerta | Falta `idLote` o `idGalpon` | CU07.FR-010 |
+| Galpón | Falta `id` o `estado`; `estado` fuera del catálogo `EstadoGalpon` | CU07.FR-010 |
+| Lote | Sin `poblacionInicial`, `costoTotal <= 0` o `poblacionActual > poblacionInicial` | CU07.FR-011 |
 | Resultado | `cantidadFinalPollos <= 0`, `pesoTotalKg <= 0` o ausentes; ya existe otro resultado para el lote | CU08.FR-003, FR-010 |
 | Resultado (corrección) | El resultado existente ya está `UTILIZADO`, aunque su Liquidación se haya anulado (se registra incidencia y no se actualiza) | CU08.FR-004, FR-005 |
 | Partida / consumo | Falta `idLote` o cantidad `<= 0` | CU09, CU10 |
 
-**Lote inexistente no es un dato inválido.** Si un evento válido de alerta, resultado, partida o consumo llega antes que el evento de `avicontrol.m1.galpones` que trae su lote, se guarda en `evento_pendiente_lote`, su fila de la bitácora queda `PENDIENTE_LOTE` y se aplica cuando llega el lote (reglas en la [arquitectura general](../arquitectura/general.md#b-reglas-de-consumo)).
+**Lote inexistente.** Con REST no hay orden de llegada: M3 sincroniza primero galpones y lotes de M1, y solo después consulta a M2 los lotes que ya existen en la copia local. Por eso no hay eventos "pendientes de lote" ni la tabla `evento_pendiente_lote`.
 
 ---
 
 ## Snippets de Código Java
 
-### Puerto de Entrada: `SincronizarModulo1UseCase.java`
+### Puerto de salida: `ConsultarGalponesM1.java`
 ```java
-package co.edu.unimagdalena.avicontrol.domain.port.in;
+package co.edu.unimagdalena.avicontrol.domain.port.out;
 
-import co.edu.unimagdalena.avicontrol.domain.port.in.dto.evento.AlertaVaciadoEvento;
-import co.edu.unimagdalena.avicontrol.domain.port.in.dto.evento.GalponEvento;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
-public interface SincronizarModulo1UseCase {
-    /** CU07 — Upsert del galpón y, si viene, de su lote vinculado. */
-    void procesarGalpon(UUID idEvento, GalponEvento evento);
+public interface ConsultarGalponesM1 {
+    /** Todas las páginas de GET /galpones. Lanza ConsultaM1Exception si M1 falla o no responde. */
+    List<GalponM1> listarGalpones();
 
-    /** CU07 — Inserta la alerta si no existe; las alertas son inmutables. */
-    void procesarAlertaVaciado(UUID idEvento, AlertaVaciadoEvento evento);
+    /** GET /galpones/{id}; vacío si M1 responde 404. */
+    Optional<GalponM1> detalle(UUID idGalpon);
+
+    /** GET /galpones/{id}/lotes: lote activo (opcional) y lotes anteriores. */
+    HistorialLotesM1 historial(UUID idGalpon);
 }
 ```
 
-`SincronizarModulo2UseCase` sigue el mismo patrón con `procesarResultadoSacrificio`, `procesarPartidaAlimento` y `procesarConsumoMedicamento`.
-
-### Consumidor Kafka: `Modulo1EventConsumer.java`
+### Puerto de entrada: `SincronizarModulo1UseCase.java`
 ```java
-package co.edu.unimagdalena.avicontrol.infrastructure.adapter.messaging;
+package co.edu.unimagdalena.avicontrol.domain.port.in;
 
-import co.edu.unimagdalena.avicontrol.domain.port.in.SincronizarModulo1UseCase;
-import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.support.Acknowledgment;
-import org.springframework.stereotype.Component;
+public interface SincronizarModulo1UseCase {
+    /** CU07 — Consulta a M1 y actualiza galpones, lotes y alertas derivadas. Una fila en la bitácora por ejecución. */
+    ResultadoSincronizacion sincronizar();
+}
+```
+
+`SincronizarModulo2UseCase` sigue el mismo patrón con `sincronizarLote(UUID idLote)` (resultado, partidas de alimento y consumos).
+
+### Tarea programada: `SincronizacionM1Job.java`
+```java
+package co.edu.unimagdalena.avicontrol.infrastructure.adapter.scheduling;
 
 @Component
-public class Modulo1EventConsumer {
+public class SincronizacionM1Job {
 
-    private final SincronizarModulo1UseCase sincronizarModulo1;
-    private final EventoMapper mapper;
+    private final SincronizarModulo1UseCase sincronizar;
 
-    public Modulo1EventConsumer(SincronizarModulo1UseCase sincronizarModulo1, EventoMapper mapper) {
-        this.sincronizarModulo1 = sincronizarModulo1;
-        this.mapper = mapper;
-    }
+    // Constructor...
 
-    @KafkaListener(topics = "${kafka.topicos.m1-galpones}", groupId = "avicontrol-modulo3")
-    public void consumirGalpon(SobreEvento<GalponPayload> sobre, Acknowledgment ack) {
-        sincronizarModulo1.procesarGalpon(sobre.header().eventId(), mapper.toGalponEvento(sobre.payload()));
-        ack.acknowledge(); // solo después de confirmar la transacción
-    }
-
-    @KafkaListener(topics = "${kafka.topicos.m1-alertas-vaciado}", groupId = "avicontrol-modulo3")
-    public void consumirAlerta(SobreEvento<AlertaVaciadoPayload> sobre, Acknowledgment ack) {
-        sincronizarModulo1.procesarAlertaVaciado(sobre.header().eventId(), mapper.toAlertaEvento(sobre.payload()));
-        ack.acknowledge();
+    /** Poco después de arrancar (10 s) y luego cada ${sync.m1.intervalo}. Nunca lanza: un fallo queda en la bitácora. */
+    @Scheduled(initialDelayString = "${sync.m1.retraso-inicial:PT10S}", fixedDelayString = "${sync.m1.intervalo:PT5M}")
+    public void ejecutar() {
+        sincronizar.sincronizar();
     }
 }
 ```
 
 ### Servicio de Sincronización: `SyncModulo1Service.java`
 ```java
-package co.edu.unimagdalena.avicontrol.application.service.sync;
-
-import co.edu.unimagdalena.avicontrol.domain.model.FuenteSincronizacion;
-import co.edu.unimagdalena.avicontrol.domain.port.in.SincronizarModulo1UseCase;
-import co.edu.unimagdalena.avicontrol.domain.port.in.dto.evento.AlertaVaciadoEvento;
-import co.edu.unimagdalena.avicontrol.domain.port.in.dto.evento.GalponEvento;
-import co.edu.unimagdalena.avicontrol.domain.port.out.*;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Clock;
-import java.util.UUID;
-
 @Service
 public class SyncModulo1Service implements SincronizarModulo1UseCase {
 
+    private final ConsultarGalponesM1 m1;
     private final GalponRepository galponRepository;
     private final LoteRepository loteRepository;
     private final AlertaVaciadoSanitarioRepository alertaRepository;
     private final RegistroSincronizacionRepository bitacora;
-    private final EventoPendienteLoteRepository pendientes;
-    private final AplicadorEventosPendientes aplicadorPendientes; // aplica los pendientes de M1 y M2 de un lote
     private final Clock clock;
 
     // Constructor con inyección de dependencias...
 
     @Override
-    @Transactional
-    public void procesarGalpon(UUID idEvento, GalponEvento evento) {
-        if (bitacora.yaRegistrado(idEvento)) return;              // idempotencia por eventId (cualquier resultado)
-        var registro = bitacora.iniciar(FuenteSincronizacion.MODULO_1, "m1.galpones", idEvento, clock.instant());
-
-        var errores = evento.validar();                           // CU07.FR-010 y FR-011
-        if (!errores.isEmpty()) {
-            bitacora.fallar(registro, String.join("; ", errores), clock.instant());
-            return;                                               // no sobrescribe la copia local
-        }
-        galponRepository.guardarOActualizar(evento.toGalpon(clock.instant()));
-        int filas = 1;
-        if (evento.loteVinculado() != null) {
-            boolean loteNuevo = loteRepository.guardarOActualizar(evento.toLote(clock.instant()));
-            filas++;
-            if (loteNuevo) {
-                aplicadorPendientes.aplicar(evento.loteVinculado().idLote()); // eventos que llegaron antes que el lote
+    public ResultadoSincronizacion sincronizar() {
+        var registro = bitacora.iniciar(FuenteSincronizacion.MODULO_1, "GET /api/v1/galpones", clock.instant());
+        try {
+            int filas = 0;
+            for (var resumen : m1.listarGalpones()) {
+                filas += sincronizarGalpon(registro, resumen.id());   // una transacción por galpón
             }
+            bitacora.completar(registro, filas, clock.instant());
+        } catch (ConsultaM1Exception e) {
+            bitacora.fallar(registro, e.getMessage(), clock.instant()); // la copia local queda intacta
         }
-        bitacora.completar(registro, filas, clock.instant());
-    }
-
-    @Override
-    @Transactional
-    public void procesarAlertaVaciado(UUID idEvento, AlertaVaciadoEvento evento) {
-        if (bitacora.yaRegistrado(idEvento)) return;
-        var registro = bitacora.iniciar(FuenteSincronizacion.MODULO_1, "m1.alertas-vaciado", idEvento, clock.instant());
-        if (!loteRepository.existe(evento.idLote())) {
-            pendientes.guardar(idEvento, evento.idLote(), "m1.alertas-vaciado", evento, clock.instant());
-            bitacora.marcarPendienteLote(registro);                // el offset se confirma; no es un error
-            return;
-        }
-        // Inmutable: si ya existe una alerta para el lote no se modifica (CU07 esc. 6)
-        int filas = alertaRepository.guardarSiNoExiste(evento.toAlerta(registro.id())) ? 1 : 0;
-        bitacora.completar(registro, filas, clock.instant());
+        return bitacora.resultado(registro);
     }
 }
 ```
 
-`SyncModulo2Service` aplica la misma comprobación de lote en `procesarResultadoSacrificio`, `procesarPartidaAlimento` y `procesarConsumoMedicamento`. `AplicadorEventosPendientes` (en `application/service/sync/`) lee los pendientes del lote en orden de `fecha_hora_recepcion`, los aplica con la misma lógica de cada tipo, pasa su fila de la bitácora a `EXITOSA` o `FALLIDA` y los borra, todo en la transacción del galpón.
-
-Los errores técnicos (base de datos caída) se propagan como excepción para que el `DefaultErrorHandler` de Spring Kafka aplique los reintentos y la DLT. Un JSON ilegible no llega al servicio: lo detecta el `ErrorHandlingDeserializer` y va directo a la DLT (T005).
+`sincronizarGalpon` hace el `upsert` del galpón, del lote activo (`ACTIVO`) y de cada lote anterior (`DESVINCULADO`), e inserta la alerta derivada si no existe, todo en una transacción. Repetir la sincronización no cambia nada (`upsert` por `id_galpon` e `id_lote`).
 
 ### Publicación de avisos: `PublicarAvisosUtilizacionService.java`
 ```java
-package co.edu.unimagdalena.avicontrol.application.service.sync;
-
-import co.edu.unimagdalena.avicontrol.domain.port.out.AvisoUtilizacionPublisher;
-import co.edu.unimagdalena.avicontrol.domain.port.out.AvisoUtilizacionRepository;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Service;
-
 @Service
 public class PublicarAvisosUtilizacionService {
 
@@ -287,7 +283,7 @@ public class PublicarAvisosUtilizacionService {
     @Scheduled(fixedDelayString = "${avisos.intervalo:PT1M}")
     public void publicarPendientes() {
         for (var aviso : avisoRepository.buscarPendientes()) {
-            boolean entregado = publisher.publicar(aviso);   // espera la confirmación del broker
+            boolean entregado = publisher.publicar(aviso);   // espera la confirmación de M2
             avisoRepository.registrarIntento(aviso.id(), entregado);
         }
     }
@@ -296,45 +292,46 @@ public class PublicarAvisosUtilizacionService {
 
 ---
 
-## Phase 1: Foundational – Esquema SQL e Infraestructura Kafka
+## Phase 1: Foundational – Esquema SQL y clientes REST
 
 - [ ] **T001** Crear migración Flyway `V1__create_sync_tables.sql` (DDL de la arquitectura general).
 - [ ] **T002** Crear migración Flyway `V2__create_partidas_tables.sql`.
-- [ ] **T003** Crear modelos de dominio (`Galpon`, `Lote`, `AlertaVaciadoSanitario`, `ResultadoFinalSacrificio`, `PartidaAlimentoLote`, `ConsumoMedicamentoLote`, `TramoRecepcionConsumo`, `RegistroSincronizacion`, `EventoPendienteLote`, `AvisoUtilizacionResultado`) y enums (`EstadoGalpon`, `FuenteSincronizacion`, `ResultadoSincronizacion`, `EstadoUtilizacion`, `EstadoValorizacion`, `EstadoEntregaAviso`).
+- [ ] **T003** Crear modelos de dominio (`Galpon`, `Lote`, `AlertaVaciadoSanitario`, `ResultadoFinalSacrificio`, `PartidaAlimentoLote`, `ConsumoMedicamentoLote`, `TramoRecepcionConsumo`, `RegistroSincronizacion`, `AvisoUtilizacionResultado`) y enums (`EstadoGalpon`, `FuenteSincronizacion`, `ResultadoSincronizacion`, `EstadoUtilizacion`, `EstadoValorizacion`, `EstadoEntregaAviso`).
 - [ ] **T004** Crear entidades JPA, repositorios Spring Data, adaptadores de los puertos `port/out` y mappers.
-- [ ] **T005** Configurar Kafka en `KafkaConfig.java`: consumidor con confirmación manual y `ErrorHandlingDeserializer` envolviendo el deserializador JSON, `DefaultErrorHandler` con 3 reintentos y backoff exponencial para errores técnicos, `DeserializationException` (y sobre sin `eventId`) como no reintentable, `DeadLetterPublishingRecoverer` hacia `avicontrol.m3.dlt`, productor con `acks=all`. Tópicos en `application.yml` (`kafka.topicos.*`).
-- [ ] **T006** Crear el sobre `SobreEvento<T>` y los payloads JSON de `infrastructure/adapter/messaging/`, y los fixtures de `src/test/resources/fixtures/m1/` y `fixtures/m2/`.
+- [ ] **T005** Configurar los clientes REST en `RestClientConfig.java`: `RestClient` por módulo con su URL base de `application.yml` (`m1.base-url`, `m2.base-url`), tiempos de 2 s de conexión y 5 s de lectura, y la traducción de `application/problem+json` a `ConsultaM1Exception`.
+- [ ] **T006** Crear los DTOs de respuesta de `infrastructure/adapter/rest/cliente/` y los fixtures de `src/test/resources/fixtures/m1/` y `fixtures/m2/` (los mismos JSON del acuerdo).
 
 ---
 
 ## Phase 2: CU07 – Sincronización M1 (Galpones, Lotes y Alertas)
 
-- [ ] **T007** Unit Test `SyncModulo1ServiceTest.java`: alta y actualización de galpón y lote, población inicial sin cambios en actualizaciones, lote desvinculado conservado, alerta nueva e idempotente, alerta antes que su lote (queda `PENDIENTE_LOTE` y se aplica al llegar el lote), evento repetido descartado por `eventId`, datos inválidos registrados como `FALLIDA` sin sobrescribir.
-- [ ] **T008** Implementar `SincronizarModulo1UseCase`, `SyncModulo1Service.java` y `AplicadorEventosPendientes.java` con su puerto `EventoPendienteLoteRepository`.
-- [ ] **T009** Integration Test `Modulo1EventConsumerIT.java` (Testcontainers) e implementación de `Modulo1EventConsumer.java`, incluida la traducción de la grafía de estados de M1 (D-07).
+- [ ] **T007** Unit Test `SyncModulo1ServiceTest.java`: alta y actualización de galpón y lote, población inicial sin cambios en actualizaciones, lote desvinculado conservado, alerta derivada nueva e idempotente, galpón sin lote activo, galpón que M1 ya no devuelve (404, la copia no se borra), datos inválidos omitidos sin sobrescribir, M1 caído (ejecución `FALLIDA` y copia intacta).
+- [ ] **T008** Implementar `SincronizarModulo1UseCase`, `SyncModulo1Service.java` y el puerto `ConsultarGalponesM1`.
+- [ ] **T009** Integration Test `ClienteM1RestIT.java` (servidor HTTP simulado con los JSON del acuerdo) e implementación de `ClienteM1Rest.java`, incluida la paginación con `page`, el `200` sin `loteActivo` y los errores `problem+json`.
+- [ ] **T009b** Implementar `SincronizacionM1Job.java` y la configuración `sync.m1.intervalo` y `m1.base-url`.
 
 ---
 
 ## Phase 3: CU08 – Resultado de Sacrificio y Aviso de Utilización
 
-- [ ] **T010** Unit Test `SyncModulo2ServiceTest.java` (resultado): resultado válido, inválido, corrección antes de ser utilizado, corrección rechazada después de ser utilizado (también si la Liquidación se anuló), segundo resultado para el mismo lote, resultado antes que su lote.
-- [ ] **T011** Implementar `procesarResultadoSacrificio` en `SyncModulo2Service.java`.
+- [ ] **T010** Unit Test `SyncModulo2ServiceTest.java` (resultado): resultado válido, inválido, corrección antes de ser utilizado, corrección rechazada después de ser utilizado (también si la Liquidación se anuló), segundo resultado para el mismo lote.
+- [ ] **T011** Implementar `sincronizarLote` en `SyncModulo2Service.java` para el resultado. Depende de la respuesta de M2 (D-08).
 - [ ] **T012** Unit Test `PublicarAvisosUtilizacionServiceTest.java`: entrega exitosa, fallo que deja el aviso `PENDIENTE` e incrementa `intentos`.
-- [ ] **T013** Implementar `PublicarAvisosUtilizacionService.java`, el puerto `AvisoUtilizacionPublisher` y `AvisoUtilizacionKafkaProducer.java`. La creación del aviso en la misma transacción de la Liquidación se implementa en el plan 003 (T009).
+- [ ] **T013** Implementar `PublicarAvisosUtilizacionService.java`, el puerto `AvisoUtilizacionPublisher` y el adaptador del canal acordado con M2 (D-03). La creación del aviso en la misma transacción de la Liquidación se implementa en el plan 003 (T009).
 
 ---
 
 ## Phase 4: CU09 y CU10 – Alimento y Medicamentos
 
-- [ ] **T014** Unit Tests de `SyncModulo2Service` para partidas de alimento (valorizada, `PENDIENTE_PRECIO`, idempotencia) y consumos de medicamento (uno y varios tramos, tramo sin precio, reemplazo de tramos al reprocesar), y partida o consumo antes que su lote.
-- [ ] **T015** Implementar `procesarPartidaAlimento` y `procesarConsumoMedicamento`.
-- [ ] **T016** Integration Test `Modulo2EventConsumerIT.java` e implementación de `Modulo2EventConsumer.java`. Incluye el arranque con base vacía: se publican primero los eventos de M2 y después el del galpón, y al final la copia local queda completa. Incluye también un JSON ilegible que pasa a la DLT sin reintentos.
+- [ ] **T014** Unit Tests de `SyncModulo2Service` para partidas de alimento (valorizada, `PENDIENTE_PRECIO`, idempotencia) y consumos de medicamento (uno y varios tramos, tramo sin precio, reemplazo de tramos al reprocesar).
+- [ ] **T015** Implementar la parte de alimento y medicamento de `sincronizarLote`.
+- [ ] **T016** Integration Test `ClienteM2RestIT.java` e implementación de `ClienteM2Rest.java` (Basic Auth con `M2_USUARIO` y `M2_CLAVE`).
 
 ---
 
 ## Phase 5: Estado de la Sincronización (RT-09)
 
-- [ ] **T017** Implementar `GET /api/v1/sincronizacion/estado` con el puerto `ConsultarEstadoSincronizacionUseCase`, `EstadoSincronizacionService` (`application/service/sync/`) y `SincronizacionController` (`adapter/rest/`). `ListarLotesService` (plan 002) usa el mismo puerto. El endpoint responde por fuente la fecha y hora de la última sincronización exitosa y `desactualizada: true` si supera `sync.umbral-inactividad` o el broker no está disponible.
+- [ ] **T017** Implementar `GET /api/v1/sincronizacion/estado` con el puerto `ConsultarEstadoSincronizacionUseCase`, `EstadoSincronizacionService` (`application/service/sync/`) y `SincronizacionController` (`adapter/rest/`). `ListarLotesService` (plan 002) usa el mismo puerto. El endpoint responde por fuente la fecha y hora de la última sincronización exitosa y `desactualizada: true` si supera `sync.umbral-inactividad` o si la última ejecución falló.
 
 ```json
 GET /api/v1/sincronizacion/estado

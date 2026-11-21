@@ -14,7 +14,7 @@ Hay un caso de prueba por cada caso de uso implementado:
 | [`m3-cu05-desglose-ventas-gastos.md`](../pruebas/casos/m3-cu05-desglose-ventas-gastos.md) | M3-CU05 Desglose de ventas y gastos | [004](../planes/004-reportes-historial.md) |
 | [`m3-cu06-historial-liquidaciones.md`](../pruebas/casos/m3-cu06-historial-liquidaciones.md) | M3-CU06 Historial de liquidaciones | [004](../planes/004-reportes-historial.md) |
 
-**Lo que no se puede probar todavía.** Los casos de uso CU07 a CU10 (consumo de eventos de Módulo 1 y Módulo 2 por Kafka) y la publicación de avisos de utilización a Módulo 2 no están implementados: el backend no tiene consumidores ni publicadores de Kafka. La app trabaja solo con los datos del seed del perfil `dev`, y la tabla `registro_sincronizacion` no recibe filas nuevas al usar la app.
+**Lo que no se puede probar todavía.** Los casos de uso CU07 a CU10 (consulta REST a Módulo 1 y Módulo 2) y la publicación de avisos de utilización a Módulo 2 no están implementados: el backend no tiene clientes REST ni tarea de sincronización. La app trabaja solo con los datos del seed del perfil `dev`, y la tabla `registro_sincronizacion` no recibe filas nuevas al usar la app.
 
 ## 2. Preparación del entorno
 

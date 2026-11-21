@@ -118,7 +118,7 @@ Para indicar un cambio incompatible se agrega `!` después del alcance (`feat(ap
 | `venta` | Venta bruta: peso total kg × precio/kg (3.2, M3-CU03.FR-001) |
 | `liquidacion` | Lista de lotes y cierre del lote: mortalidad, costos operativos, utilidad neta, generar y anular (3.2) |
 | `reportes` | Reporte de rentabilidad: costos frente a ingresos, comparación por galpón |
-| `integracion` | Consumo de los eventos Kafka de los módulos 1 y 2 y aviso de utilización a M2 |
+| `integracion` | Sincronización por REST con los módulos 1 y 2 y aviso de utilización a M2 |
 
 Un alcance funcional cubre backend y frontend: `feat(liquidacion)` puede tocar las clases de liquidación del backend y `frontend/src/features/liquidacion/` en el mismo commit. El backend se organiza por capas, no por área (ver [estructura del repositorio](docs/proceso/estructura-repositorio.md#áreas-funcionales-y-alcances-de-commit)).
 

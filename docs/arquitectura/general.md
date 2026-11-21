@@ -6,7 +6,7 @@
 
 ## Propósito
 
-Este documento define la arquitectura, las tecnologías, el modelo de datos relacional (DER y DDL SQL), la infraestructura de integración (Apache Kafka y Apache POI) y las reglas técnicas comunes de AviControl Módulo 3 (Liquidación de Lote y Análisis de Rentabilidad). Es la fuente única de verdad para estas decisiones: los planes de implementación funcionales enlazan este archivo y documentan únicamente su alcance, modelos, contratos y tareas de implementación. Ningún plan repite el DDL.
+Este documento define la arquitectura, las tecnologías, el modelo de datos relacional (DER y DDL SQL), la infraestructura de integración (consultas REST a otros módulos y Apache POI) y las reglas técnicas comunes de AviControl Módulo 3 (Liquidación de Lote y Análisis de Rentabilidad). Es la fuente única de verdad para estas decisiones: los planes de implementación funcionales enlazan este archivo y documentan únicamente su alcance, modelos, contratos y tareas de implementación. Ningún plan repite el DDL.
 
 ---
 
@@ -23,16 +23,16 @@ Este documento define la arquitectura, las tecnologías, el modelo de datos rela
 | Persistencia | Spring Data JPA + Hibernate | Repositorios y entidades JPA |
 | Base de datos | PostgreSQL 16 en todos los perfiles | Copia local sincronizada y liquidaciones. No se usa H2: no soporta el índice único parcial `uq_lote_activa` |
 | Migraciones | Flyway (`flyway-core`, `flyway-database-postgresql`) | Versionamiento y aplicación ordenada del esquema SQL |
-| Mensajería inter-módulos | Apache Kafka + Spring Kafka 4 | **Único** mecanismo de integración con Módulo 1 y Módulo 2 (eventos entrantes) y aviso de utilización hacia Módulo 2 (evento saliente) |
+| Integración inter-módulos | `RestClient` (Spring Web) + `@Scheduled` | Consultas REST a Módulo 1 y Módulo 2 que llenan la copia local (SC-06). El aviso de utilización hacia Módulo 2 usa el canal que acuerde M2 (REST o Kafka, D-03) |
 | Exportación de reportes | Apache POI `poi-ooxml:5.5.1` | Generación de reportes Excel (CU05) |
-| Serialización | Jackson 3 (paquete `tools.jackson`) | JSON para API REST y eventos Kafka |
+| Serialización | Jackson 3 (paquete `tools.jackson`) | JSON para API REST y para las respuestas de M1 y M2 |
 | Documentación API | OpenAPI 3 (`springdoc-openapi` 3.x) | Descripción interactiva de endpoints en `/swagger-ui.html` |
 | Pruebas unitarias | JUnit 5 y Mockito | Reglas de dominio y casos de uso aislados |
-| Pruebas de integración | Spring Boot Test + Testcontainers 2 | PostgreSQL y Kafka reales durante las pruebas |
+| Pruebas de integración | Spring Boot Test + Testcontainers 2 | PostgreSQL real y servidores HTTP simulados de M1 y M2 durante las pruebas |
 | Utilidades | Lombok | Reducción de código repetitivo (solo en `infrastructure`) |
 | Calidad y arquitectura | Spotless y ArchUnit | Formato uniforme y verificación de límites entre capas |
-| Observabilidad | Spring Boot Actuator y Micrometer | Salud (`/actuator/health`, incluye la conexión al broker) y métricas operativas |
-| Entorno local | Docker Compose | PostgreSQL y Kafka para desarrollo local |
+| Observabilidad | Spring Boot Actuator y Micrometer | Salud (`/actuator/health`, incluye la base de datos) y métricas operativas |
+| Entorno local | Docker Compose | PostgreSQL para desarrollo local (el `compose.yaml` conserva Kafka para probar el aviso de utilización) |
 | Abstracción de tiempo | `java.time.Clock` | Fecha/hora inyectada para auditabilidad y pruebas deterministas |
 
 ### Comandos de construcción
@@ -80,7 +80,7 @@ co.edu.unimagdalena.avicontrol/
 │   │   │       ├── HistorialPageDto.java
 │   │   │       ├── DesgloseDto.java
 │   │   │       ├── EstadoSincronizacionDto.java
-│   │   │       └── evento/            ← Datos de los eventos entrantes ya validados: GalponEvento, ResultadoSacrificioEvento…
+│   │   │       └── sync/              ← Datos de M1 y M2 ya traducidos y validados: GalponM1, HistorialLotesM1, ResultadoSacrificioM2…
 │   │   └── out/                       ← Interfaces de repositorios y publicadores (Puertos de salida)
 │   │       ├── GalponRepository.java
 │   │       ├── LoteRepository.java
@@ -109,11 +109,10 @@ co.edu.unimagdalena.avicontrol/
 │       └── sync/
 │           ├── SyncModulo1Service.java
 │           ├── SyncModulo2Service.java
-│           ├── AplicadorEventosPendientes.java
 │           ├── EstadoSincronizacionService.java
 │           └── PublicarAvisosUtilizacionService.java
 │
-└── infrastructure/                    ← Adaptadores técnicos. Conoce Spring, JPA, Kafka y POI.
+└── infrastructure/                    ← Adaptadores técnicos. Conoce Spring, JPA, HTTP y POI.
     ├── adapter/
     │   ├── rest/                      ← Controladores HTTP de entrada, Request/Response
     │   │   ├── LoteController.java
@@ -121,18 +120,20 @@ co.edu.unimagdalena.avicontrol/
     │   │   ├── DesgloseController.java
     │   │   ├── HistorialController.java
     │   │   └── SincronizacionController.java
-    │   ├── messaging/                 ← Kafka: consumidores de M1/M2 y productor del aviso
-    │   │   ├── Modulo1EventConsumer.java
-    │   │   ├── Modulo2EventConsumer.java
-    │   │   └── AvisoUtilizacionKafkaProducer.java
+    │   ├── client/                    ← Clientes REST de M1 y M2 y publicador del aviso de utilización
+    │   │   ├── ClienteM1Rest.java
+    │   │   ├── ClienteM2Rest.java
+    │   │   └── AvisoUtilizacionPublisherAdapter.java
+    │   ├── scheduling/                ← Tareas programadas de sincronización
+    │   │   └── SincronizacionM1Job.java
     │   ├── persistence/               ← Entidades JPA (@Entity), repositorios Spring Data y mappers
     │   └── export/                    ← ExcelWorkbookBuilder (Apache POI), implementa GeneradorExcelPort
-    ├── config/                        ← Configuración: Kafka, OpenAPI, Scheduler, Clock, Actuator
+    ├── config/                        ← Configuración: clientes REST, OpenAPI, Scheduler, Clock, Actuator
     └── exception/                     ← @RestControllerAdvice → ProblemDetail RFC 7807
 ```
 
 > **★ Regla de Dependencias (Arquitectura Limpia Estricta)**: 
-> 1. Los DTOs consumidos o retornados por los casos de uso se ubican en `co.edu.unimagdalena.avicontrol.domain.port.in.dto` como `record`s de Java puro. Los `*Request`/`*Response` HTTP y los sobres JSON de Kafka viven en `infrastructure` y se traducen a esos DTOs.
+> 1. Los DTOs consumidos o retornados por los casos de uso se ubican en `co.edu.unimagdalena.avicontrol.domain.port.in.dto` como `record`s de Java puro. Los `*Request`/`*Response` HTTP y las respuestas JSON de M1 y M2 viven en `infrastructure` y se traducen a esos DTOs.
 > 2. La capa `domain/` **NUNCA importa clases de `application/`, de `infrastructure/` ni de frameworks** (incluido `org.springframework.data.domain.Page`: la paginación del dominio usa `domain.shared.Pagina<T>`).
 > 3. Los mappers que transforman entre entidades JPA y modelos o DTOs de dominio residen en `infrastructure`.
 > 4. ArchUnit verifica estas reglas en `ArchitectureTest`.
@@ -142,15 +143,16 @@ Contiene el modelo de negocio puro: entidades (`Liquidacion`, `Galpon`, `Lote`, 
 - **Regla estricta**: Java puro. No importa Spring, JPA, Jackson, Kafka ni clases de las capas externas.
 
 ### Capa `application/` (Servicios)
-Contiene los servicios de aplicación que implementan las interfaces `port/in`, orquestan el dominio y procesan los eventos de sincronización ya traducidos por los consumidores. Define el límite transaccional (`@Transactional`) y no conoce controladores HTTP, entidades JPA, Kafka ni serialización.
+Contiene los servicios de aplicación que implementan las interfaces `port/in`, orquestan el dominio y procesan los datos de sincronización ya traducidos por los clientes REST. Define el límite transaccional (`@Transactional`) y no conoce controladores HTTP, entidades JPA, clientes HTTP ni serialización.
 
 ### Capa `infrastructure/`
 Contiene los adaptadores concretos:
 - **`adapter/rest/`**: Controladores REST (entrada HTTP).
-- **`adapter/messaging/`**: Consumidores Kafka de los eventos de Módulo 1 y Módulo 2, y productor del aviso de utilización.
+- **`adapter/client/`**: Clientes REST de Módulo 1 y Módulo 2 y publicador del aviso de utilización.
+- **`adapter/scheduling/`**: Tareas programadas que disparan la sincronización.
 - **`adapter/persistence/`**: Entidades JPA (`@Entity`), repositorios Spring Data y mappers hacia el dominio.
 - **`adapter/export/`**: Construcción del libro Excel con Apache POI.
-- **`config/`**: Configuración de Kafka, OpenAPI, Scheduler, `Clock` y Actuator.
+- **`config/`**: Configuración de los clientes REST, OpenAPI, Scheduler, `Clock` y Actuator.
 - **`exception/`**: Manejador global de excepciones (`@RestControllerAdvice`) con RFC 7807 (`ProblemDetail`).
 
 ### Identidad del usuario
@@ -164,7 +166,7 @@ La plataforma **no tiene login** ni gestión de usuarios. No se usa Spring Secur
 Convenciones:
 - Fechas y horas en `TIMESTAMPTZ` (Java `Instant`). Los filtros por fecha del API se interpretan en la zona `America/Bogota`.
 - Montos totales COP en `BIGINT`; precios unitarios en `NUMERIC(14,2)`.
-- Los códigos de enum se almacenan en mayúsculas con guion bajo (`EN_COSECHA`, `ACTIVA`). La grafía que use Módulo 1 se traduce en el consumidor Kafka (D-07).
+- Los códigos de enum se almacenan en mayúsculas con guion bajo (`EN_COSECHA`, `ACTIVA`). La grafía que use Módulo 1 se traduce en el cliente REST (D-07).
 
 ### A. Diagrama Entidad-Relación (DER en Mermaid)
 
@@ -185,7 +187,6 @@ erDiagram
     liquidacion ||--o{ snapshot_datos_origen : documenta
     liquidacion ||--o| registro_anulacion : anula
     resultado_final_sacrificio ||--o| aviso_utilizacion_resultado : notifica
-    registro_sincronizacion ||--o| evento_pendiente_lote : retiene
     liquidacion ||--o| aviso_utilizacion_resultado : origina
 
     galpon {
@@ -326,14 +327,6 @@ erDiagram
         int registros_actualizados
     }
 
-    evento_pendiente_lote {
-        uuid id_evento PK
-        uuid id_lote
-        string topico
-        jsonb payload
-        timestamptz fecha_hora_recepcion
-    }
-
     aviso_utilizacion_resultado {
         bigint id_aviso PK
         uuid id_resultado FK
@@ -350,8 +343,7 @@ erDiagram
 > - `liquidacion.id_lote` → índice único parcial `uq_lote_activa` (`WHERE estado = 'ACTIVA'`) — máximo una Liquidación `ACTIVA` por lote; las `ANULADA` no cuentan, así que el lote admite una nueva Liquidación tras la anulación (CU03.FR-008, CU04.FR-007). Varias Liquidaciones (una activa y varias anuladas) pueden referenciar el mismo resultado de sacrificio.
 > - `registro_anulacion.id_liquidacion` → `UNIQUE` — una sola anulación por Liquidación.
 > - `aviso_utilizacion_resultado.id_resultado` → `UNIQUE` — un solo aviso por resultado; la Liquidación que lo origina es la primera que consumió el resultado (CU04, caso borde "Resultado ya avisado").
-> - `registro_sincronizacion.id_evento` → `UNIQUE` — un evento Kafka se procesa una sola vez (idempotencia).
-> - `evento_pendiente_lote.id_lote` no tiene FK: el lote todavía no existe en la copia local cuando el evento se retiene (ver [Reglas de consumo](#b-reglas-de-consumo)).
+> - `registro_sincronizacion.id_evento` → `UNIQUE` y admite nulo: con REST cada fila de la bitácora es una ejecución de la sincronización y no tiene `id_evento`. La idempotencia sale del *upsert* por llave natural (ver [Reglas de consulta](#b-reglas-de-consulta)).
 
 ---
 
@@ -365,26 +357,15 @@ CREATE TABLE registro_sincronizacion (
     id                     BIGSERIAL PRIMARY KEY,
     fuente                 VARCHAR(20)  NOT NULL,
     topico                 VARCHAR(100) NOT NULL,
-    id_evento              UUID         NOT NULL UNIQUE,
+    id_evento              UUID UNIQUE,
     fecha_hora_inicio      TIMESTAMPTZ  NOT NULL,
     fecha_hora_fin         TIMESTAMPTZ,
     resultado              VARCHAR(20),
     descripcion_error      TEXT,
     registros_actualizados INT NOT NULL DEFAULT 0,
     CONSTRAINT chk_sync_fuente    CHECK (fuente IN ('MODULO_1', 'MODULO_2')),
-    CONSTRAINT chk_sync_resultado CHECK (resultado IN ('EXITOSA', 'FALLIDA', 'PENDIENTE_LOTE'))
+    CONSTRAINT chk_sync_resultado CHECK (resultado IN ('EXITOSA', 'FALLIDA'))
 );
-
--- Eventos de M1/M2 que llegaron antes que su lote; se aplican al llegar el lote y se borran
-CREATE TABLE evento_pendiente_lote (
-    id_evento            UUID PRIMARY KEY REFERENCES registro_sincronizacion(id_evento),
-    id_lote              UUID         NOT NULL,   -- sin FK: el lote aún no existe
-    topico               VARCHAR(100) NOT NULL,
-    payload              JSONB        NOT NULL,   -- DTO del evento ya validado
-    fecha_hora_recepcion TIMESTAMPTZ  NOT NULL
-);
-
-CREATE INDEX idx_evento_pendiente_lote ON evento_pendiente_lote(id_lote, fecha_hora_recepcion);
 
 CREATE TABLE galpon (
     id_galpon       UUID PRIMARY KEY,
@@ -570,66 +551,51 @@ Las partidas se **congelan** al generar la Liquidación: se copian de la copia l
 
 ---
 
-## Integración con Módulo 1 y Módulo 2 (Apache Kafka)
+## Integración con Módulo 1 y Módulo 2 (consultas REST)
 
-M3 se integra con los demás módulos **exclusivamente por eventos Kafka**. No hace llamadas REST a M1 ni a M2 y no consulta en vivo. Ver el modelo de integración normativo en la [especificación general](../requisitos/especificacion-general.md#modelo-de-integración-normativo).
+M3 se integra con los demás módulos **consultando su REST** con una tarea programada que llena la copia local. M3 no depende de que M1 o M2 publiquen eventos (SC-06). Ver el modelo de integración normativo en la [especificación general](../requisitos/especificacion-general.md#modelo-de-integración-normativo).
 
-### A. Tópicos
+### A. Servicios consultados
 
-| Tópico | Productor | Consumidor | Clave | Evento | Caso de uso |
-| --- | --- | --- | --- | --- | --- |
-| `avicontrol.m1.galpones` | M1 | M3 | `idGalpon` | `GalponActualizadoEvent` (estado del galpón y su lote vinculado, completo) | CU07 |
-| `avicontrol.m1.alertas-vaciado` | M1 | M3 | `idLote` | `AlertaVaciadoSanitarioEvent` | CU07 |
-| `avicontrol.m2.resultados-sacrificio` | M2 | M3 | `idLote` | `ResultadoSacrificioPublicadoEvent` | CU08 |
-| `avicontrol.m2.partidas-alimento` | M2 | M3 | `idLote` | `PartidaAlimentoPublicadaEvent` | CU09 |
-| `avicontrol.m2.consumos-medicamento` | M2 | M3 | `idLote` | `ConsumoMedicamentoPublicadoEvent` (con sus tramos por recepción) | CU10 |
-| `avicontrol.m3.avisos-utilizacion` | M3 | M2 | `idResultado` | `ResultadoUtilizadoEvent` | CU08 |
-| `avicontrol.m3.dlt` | M3 | — | la original | Mensajes que fallaron tras los reintentos | Todos |
+| Módulo | Servicio | Caso de uso | Contrato |
+| --- | --- | --- | --- |
+| M1 | `GET /api/v1/galpones?page={n}` (tamaño fijo de 10) | CU07 | Acordado: [acuerdo de contratos de M1](https://github.com/AviControl-org/AVICONTROL/blob/develop/avicontrol/docs/plan-general/acuerdo-contratos-entre-modulos.md) |
+| M1 | `GET /api/v1/galpones/{id}` (galpón y `loteActivo`, opcional) | CU07 | Acordado |
+| M1 | `GET /api/v1/galpones/{id}/lotes` (`loteActivo` y `lotesAnteriores`) | CU07 | Acordado |
+| M2 | Resultado final de sacrificio por lote | CU08 | Por confirmar con M2 (D-08) |
+| M2 | Partidas de alimento por lote | CU09 | Por confirmar con M2 (D-08) |
+| M2 | Consumos de medicamento por lote, con tramos | CU10 | Por confirmar con M2 (D-08) |
+| M3 → M2 | Aviso de utilización del resultado de sacrificio | CU08 | Canal por confirmar con M2 (D-03) |
 
-Los nombres de tópico y el formato de los eventos deben confirmarse con M1 y M2 (D-08). Mientras tanto, M3 desarrolla y prueba contra este contrato con Testcontainers y con los fixtures de `src/test/resources/fixtures/`.
+Los `payload` y las respuestas están en el [plan 001](../planes/001-sincronizacion-m1-m2.md#contratos-con-módulo-1-rest-según-su-acuerdo).
 
-### B. Reglas de consumo
+### B. Reglas de consulta
 
-- **Eventos con estado completo**: cada evento trae el estado completo de la entidad (no deltas), de modo que reprocesarlo produce el mismo resultado. Los tópicos de M1 y M2 se recomiendan compactados (`cleanup.policy=compact`) para que M3 pueda reconstruir su copia local desde el inicio.
-- **Consumidor**: `groupId` `avicontrol-modulo3`, `auto-offset-reset=earliest`, confirmación manual del offset después de la transacción de base de datos.
-- **Idempotencia**: cada evento lleva `eventId`. Si `registro_sincronizacion` ya tiene ese `id_evento` (con cualquier resultado), el evento se descarta: un mismo `eventId` siempre trae el mismo contenido. Además, las escrituras son *upsert* por la llave natural (`id_galpon`, `id_lote`, `id_resultado`, `id_partida_origen`, `id_consumo_origen`); las alertas de vaciado se insertan solo si no existen (son inmutables).
-- **Bitácora**: cada evento procesado crea una fila en `registro_sincronizacion` con `fuente`, `topico`, `id_evento`, inicio, fin, resultado y filas afectadas. La "última sincronización exitosa" de una fuente es el `MAX(fecha_hora_fin)` con `resultado = 'EXITOSA'` de esa fuente.
-- **Orden entre tópicos**: Kafka solo garantiza el orden dentro de una partición de un mismo tópico. Un evento de alerta, resultado, partida o consumo puede llegar antes que el evento de `avicontrol.m1.galpones` que trae su lote, sobre todo al arrancar con la base vacía y leer todo el histórico (`earliest`).
-- **Eventos que llegan antes que su lote**: si el evento es válido pero su `idLote` no existe en la copia local, **no es un error**. Se guarda en `evento_pendiente_lote` y su fila de la bitácora queda `PENDIENTE_LOTE`; el offset se confirma. Cuando `procesarGalpon` crea el lote, en la misma transacción aplica sus pendientes en orden de llegada con las mismas reglas de un evento normal, pasa cada fila de la bitácora a `EXITOSA` o `FALLIDA` y borra el pendiente. Un pendiente con más de `sync.umbral-inactividad` horas se registra como advertencia en el log; no se descarta.
-- **Datos inválidos** (CU07.FR-010, CU08.FR-003): el evento se registra como `FALLIDA` con la causa en `descripcion_error`, no sobrescribe la copia local y no se reintenta (es un error de contenido).
-- **JSON ilegible o sobre incompleto** (sin `header.eventId`): el consumidor usa `ErrorHandlingDeserializer`, así que el mensaje no bloquea la partición. La `DeserializationException` es no reintentable y el mensaje pasa **directo** a `avicontrol.m3.dlt`, sin reintentos.
-- **Errores técnicos** (base de datos caída, broker sin respuesta): 3 reintentos con backoff exponencial (1 s, 2 s, 4 s) y luego el mensaje pasa a `avicontrol.m3.dlt`. Como la transacción se revierte, no queda fila en la bitácora.
-- **Reproceso de la DLT**: cada mensaje de la DLT conserva su clave, su valor y los headers `kafka_dlt-original-topic` y `kafka_dlt-exception-message`. Tras corregir la causa, se vuelve a publicar en su tópico original con la misma clave; la idempotencia por `eventId` hace seguro el reenvío. Para revisarla en local:
-  ```bash
-  docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 \
-    --topic avicontrol.m3.dlt --from-beginning --timeout-ms 10000 \
-    --property print.key=true --property print.headers=true
-  ```
-  Para reenviar un mensaje se usa `kafka-console-producer.sh` sobre el tópico original con `--property parse.key=true`.
-- **Indicador de antigüedad (RT-09)**: si una fuente no tiene eventos exitosos en las últimas `sync.umbral-inactividad` horas (por defecto 24) o el broker no está disponible (`/actuator/health`), la respuesta del API marca esa fuente como desactualizada para que la interfaz lo advierta.
+- **Tarea programada**: `SincronizacionM1Job` consulta a M1 poco después de arrancar (10 s) y luego cada `sync.m1.intervalo` (por defecto `PT5M`). La sincronización con M2 consulta, lote por lote, solo los lotes que ya existen en la copia local con alerta de vaciado y sin Liquidación `ACTIVA`.
+- **Estado completo**: cada respuesta trae el estado completo de la entidad (no deltas), de modo que repetir la consulta produce el mismo resultado.
+- **Idempotencia**: las escrituras son *upsert* por la llave natural (`id_galpon`, `id_lote`, `id_resultado`, `id_partida_origen`, `id_consumo_origen`); las alertas de vaciado se insertan solo si no existen (son inmutables).
+- **Orden**: primero galpones y lotes de M1, después los datos de M2 de los lotes ya existentes. Por eso no hay datos "pendientes de lote".
+- **Alerta de vaciado derivada**: M1 no expone la alerta. Un lote que aparece en `lotesAnteriores` ya pasó por vaciado sanitario, así que M3 crea su alerta con un `id_alerta` determinista y `fecha_hora_evento` igual al momento en que la detectó.
+- **Bitácora**: cada ejecución crea una fila en `registro_sincronizacion` con `fuente`, `topico` (la ruta consultada), inicio, fin, resultado y filas afectadas; `id_evento` queda vacío. La "última sincronización exitosa" de una fuente es el `MAX(fecha_hora_fin)` con `resultado = 'EXITOSA'` de esa fuente.
+- **Datos inválidos** (CU07.FR-010 y FR-011, CU08.FR-003): el elemento se omite, la causa queda en `descripcion_error`, no sobrescribe la copia local y no se reintenta (es un error de contenido).
+- **Errores técnicos** (M1 o M2 sin respuesta, tiempo agotado, HTTP 500): la ejecución queda `FALLIDA`, la copia local no se borra y el siguiente ciclo reintenta. Dentro de una misma ejecución no hay reintentos. Tiempos máximos: 2 s de conexión y 5 s de lectura.
+- **Errores de negocio de M1** (`problem+json` con `code`): `GALPON_NO_ENCONTRADO` omite ese galpón sin borrarlo de la copia local; `PARAMETRO_INVALIDO` deja la ejecución `FALLIDA`.
+- **Indicador de antigüedad (RT-09)**: si una fuente no tiene ejecuciones exitosas en las últimas `sync.umbral-inactividad` horas (por defecto 24) o su última ejecución falló, la respuesta del API marca esa fuente como desactualizada para que la interfaz lo advierta.
 
-### C. Sobre JSON de los eventos
+### C. Configuración
 
-Todos los eventos comparten el mismo sobre:
+| Variable | Uso | Por defecto |
+| --- | --- | --- |
+| `M1_BASE_URL` | URL base del REST de M1, por ejemplo `http://18.227.58.143/api/v1` | — (sin ella la sincronización con M1 no corre) |
+| `SYNC_M1_INTERVALO` | Intervalo entre sincronizaciones con M1 | `PT5M` |
+| `M2_BASE_URL`, `M2_USUARIO`, `M2_CLAVE` | REST de M2 con Basic Auth | — |
 
-```json
-{
-  "header": {
-    "eventId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-    "eventType": "ResultadoSacrificioPublicadoEvent",
-    "timestamp": "2026-10-02T15:30:00Z",
-    "sourceModule": "MODULO_2"
-  },
-  "payload": { }
-}
-```
-
-Los `payload` de cada tópico están en el [plan 001](../planes/001-sincronizacion-m1-m2.md#contratos-de-eventos-kafka).
+Las direcciones y claves se leen del entorno y nunca van en el código ni en el repositorio.
 
 ### D. Aviso de utilización (patrón *outbox*)
 
 1. Al persistir una Liquidación que consume un resultado de sacrificio, **en la misma transacción** se marca el resultado como `UTILIZADO` y, si ese resultado aún no tiene aviso, se inserta una fila `PENDIENTE` en `aviso_utilizacion_resultado`.
-2. `PublicarAvisosUtilizacionService` (`@Scheduled(fixedDelayString = "${avisos.intervalo:PT1M}")`) publica los avisos `PENDIENTE` en `avicontrol.m3.avisos-utilizacion`. Si el broker confirma, el aviso pasa a `ENTREGADO`; si falla, sigue `PENDIENTE` y se incrementa `intentos`.
+2. `PublicarAvisosUtilizacionService` (`@Scheduled(fixedDelayString = "${avisos.intervalo:PT1M}")`) entrega los avisos `PENDIENTE` a M2 por el canal acordado (D-03). Si M2 confirma, el aviso pasa a `ENTREGADO`; si falla, sigue `PENDIENTE` y se incrementa `intentos`.
 3. Un fallo del aviso nunca revierte ni bloquea la Liquidación (CU08.FR-007). Anular la Liquidación no retira el aviso.
 
 ### E. Exportación a Excel con Apache POI (`poi-ooxml:5.5.1`)
@@ -779,6 +745,6 @@ La Liquidación solo tiene dos estados: `ACTIVA` y `ANULADA`. La vista previa no
 
 ## Desarrollo y Pruebas sin Módulo 1 ni Módulo 2
 
-- **Perfil `dev`**: Docker Compose levanta PostgreSQL y Kafka. Flyway aplica `db/migration` y además `db/seed` con galpones, lotes, alertas, resultados y partidas de demostración, de modo que la API funciona sin que M1 ni M2 publiquen nada.
-- **Pruebas de integración**: Testcontainers levanta PostgreSQL y Kafka; las pruebas publican los eventos de `src/test/resources/fixtures/m1/` y `fixtures/m2/` en los tópicos y verifican la copia local resultante.
-- **Pruebas unitarias**: los puertos `port/out` se simulan con Mockito; no se necesita broker ni base de datos.
+- **Perfil `dev`**: Docker Compose levanta PostgreSQL (y Kafka, para probar el aviso de utilización). Flyway aplica `db/migration` y además `db/seed` con galpones, lotes, alertas, resultados y partidas de demostración, de modo que la API funciona sin que M1 ni M2 respondan. En producción (`prod`) no se aplica el seed: la copia local la llena la sincronización.
+- **Pruebas de integración**: Testcontainers levanta PostgreSQL; un servidor HTTP simulado responde con los JSON de `src/test/resources/fixtures/m1/` y `fixtures/m2/` y las pruebas verifican la copia local resultante.
+- **Pruebas unitarias**: los puertos `port/out` se simulan con Mockito; no se necesita M1, M2 ni base de datos.

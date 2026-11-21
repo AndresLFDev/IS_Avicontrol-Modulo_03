@@ -25,7 +25,7 @@ Estos términos tienen un único significado en todo el módulo. Ninguna especif
 
 - **Snapshot financiero**: Conjunto congelado de datos de origen (Módulo 1 y Módulo 2) con el que se calculó una Liquidación, incluyendo la fecha y hora de sincronización de cada fuente y el precio por kilogramo ingresado.
 
-- **Copia local sincronizada**: Réplica que M3 mantiene de los datos cuya fuente oficial es Módulo 1 o Módulo 2, actualizada a partir de los eventos que esos módulos publican en Kafka.
+- **Copia local sincronizada**: Réplica que M3 mantiene de los datos cuya fuente oficial es Módulo 1 o Módulo 2, actualizada con las consultas REST que M3 hace a esos módulos.
 
 ### Términos eliminados
 
@@ -38,14 +38,14 @@ Estos términos tienen un único significado en todo el módulo. Ninguna especif
 
 ## Modelo de Integración *(normativo)*
 
-**Los módulos de origen publican eventos; M3 los consume.**
+**M3 consulta a los módulos de origen; ellos no publican para M3.**
 
-1. M3 obtiene todos los datos externos **consumiendo los eventos** que Módulo 1 y Módulo 2 publican en Apache Kafka. M3 no hace llamadas REST ni consultas directas a otros módulos.
-2. M3 persiste el contenido de esos eventos en su **copia local sincronizada**, junto con la fecha y hora en que procesó cada evento.
-3. **Ninguna operación funcional de M3 requiere comunicación en vivo.** Si Módulo 1 o Módulo 2 dejan de publicar o el broker no está disponible, M3 opera con la última copia local y muestra su antigüedad.
-4. M3 **no escribe** en Módulo 1 ni en Módulo 2. Su única publicación hacia otro módulo es el aviso de utilización del resultado final de sacrificio declarado en M3-CU08, en un tópico propio.
+1. M3 obtiene todos los datos externos **consultando el REST** de Módulo 1 y Módulo 2 con una tarea programada. Módulo 1 expone las consultas de su acuerdo de contratos; Módulo 2 expone las suyas (contrato por confirmar, D-08).
+2. M3 persiste el resultado de cada consulta en su **copia local sincronizada**, junto con la fecha y hora de la sincronización.
+3. **Ninguna operación funcional de M3 requiere comunicación en vivo.** Las operaciones leen la copia local. Si Módulo 1 o Módulo 2 no responden, M3 opera con la última copia local y muestra su antigüedad.
+4. M3 **no escribe** en Módulo 1 ni en Módulo 2. Su única entrega hacia otro módulo es el aviso de utilización del resultado final de sacrificio declarado en M3-CU08, por el canal que acuerde con Módulo 2 (D-03).
 
-Las especificaciones M3-CU07 a M3-CU10 documentan cada flujo de eventos. Conservan el nombre "Consultar…" porque así se llaman los casos de uso que Módulo 1 y Módulo 2 exponen hacia M3 en sus diagramas; el mecanismo es la suscripción a eventos. Ninguna otra especificación del módulo puede definir un acceso externo por su cuenta. Los tópicos y el formato de los eventos están en la [arquitectura general](../arquitectura/general.md#integración-con-módulo-1-y-módulo-2-apache-kafka).
+Las especificaciones M3-CU07 a M3-CU10 documentan cada flujo de consulta. Conservan el nombre "Consultar…" porque así se llaman los casos de uso que Módulo 1 y Módulo 2 exponen hacia M3 en sus diagramas. Ninguna otra especificación del módulo puede definir un acceso externo por su cuenta. Los contratos están en el [plan 001](../planes/001-sincronizacion-m1-m2.md) y las reglas de consulta en la [arquitectura general](../arquitectura/general.md#integración-con-módulo-1-y-módulo-2-consultas-rest).
 
 ---
 
@@ -59,7 +59,7 @@ Las especificaciones M3-CU07 a M3-CU10 documentan cada flujo de eventos. Conserv
 - **RT-06 – (eliminada 2026-09-21)**: Regulaba la independencia de anulación entre Matriz de Ventas y Liquidación. Sin objeto por la misma razón.
 - **RT-07 – Valorización**: M3 recibe de los módulos de origen **hechos físicos valorizados** (cantidad + precio unitario). La multiplicación, la consolidación y el cálculo de la utilidad son responsabilidad exclusiva de M3. Ningún módulo externo entrega cifras en pesos ya consolidadas por lote.
 - **RT-08 – Costos indirectos**: Administración, arrendamientos, nómina general y servicios quedan fuera del alcance del módulo.
-- **RT-09 – Visibilidad de la sincronización**: Toda pantalla del módulo muestra la fecha y hora de la última sincronización exitosa con Módulo 1 y con Módulo 2, y advierte cuando no se han recibido eventos de alguno de ellos dentro del umbral configurado o el broker no está disponible. La forma visual del indicador es una decisión de diseño; su presencia no.
+- **RT-09 – Visibilidad de la sincronización**: Toda pantalla del módulo muestra la fecha y hora de la última sincronización exitosa con Módulo 1 y con Módulo 2, y advierte cuando alguno de ellos no tiene una sincronización exitosa dentro del umbral configurado o su última consulta falló. La forma visual del indicador es una decisión de diseño; su presencia no.
 
 ### Supuestos transversales
 
@@ -114,7 +114,7 @@ Orden sugerido de implementación: **CU07 a CU10** (sincronización) → **CU01*
 
 El módulo se considera ACEPTADO cuando se cumplen TODOS:
 
-- **CA-G01**: Los 9 casos de uso operan de extremo a extremo; los cinco internos con el rol Administrador Financiero y los cuatro de integración mediante el consumo de los eventos de Módulo 1 y Módulo 2.
+- **CA-G01**: Los 9 casos de uso operan de extremo a extremo; los cinco internos con el rol Administrador Financiero y los cuatro de integración mediante la consulta REST a Módulo 1 y Módulo 2.
 - **CA-G02**: Cada escenario de aceptación de los specs CU01, CU03–CU10 pasa tal cual está escrito.
 - **CA-G03**: Los cálculos de al menos 3 lotes de prueba coinciden 100% con liquidación manual firmada por el stakeholder.
 - **CA-G04**: Es imposible generar una segunda Liquidación `ACTIVA` para el mismo lote.
@@ -144,12 +144,12 @@ Estas decisiones bloquean la implementación y deben resolverse en mesa conjunta
 | :--- | :--- | :--- | :--- |
 | D-01 | Criterio de costeo del alimento: compras, consumo real o requerimiento proyectado | M3-CU03, M3-CU09 | Módulo 2 |
 | D-02 | Exposición formal de población inicial, población actual, costo del lote, estado y alerta de vaciado sanitario | M3-CU07 | Módulo 1 |
-| D-03 | Formato y confirmación del aviso de utilización del resultado final de sacrificio (el transporte es Kafka, tópico `avicontrol.m3.avisos-utilizacion`), y que Módulo 2 no corrija un resultado ya avisado: para M3 es definitivo aunque la Liquidación se anule | M3-CU08 | Módulo 2 |
+| D-03 | Formato y confirmación del aviso de utilización del resultado final de sacrificio (el canal, REST de M2 o Kafka alojado por M2, se acuerda con M2), y que Módulo 2 no corrija un resultado ya avisado: para M3 es definitivo aunque la Liquidación se anule | M3-CU08 | Módulo 2 |
 | D-04 | Ruta de estado para liquidar un lote con mortalidad total | M3-CU03, M3-CU07 | Módulo 1 |
 | D-05 | Tratamiento del impuesto informado por Módulo 2: ¿los costos operativos se calculan sobre valor neto o con impuesto? | M3-CU03, M3-CU09, M3-CU10 | Módulo 2 |
 | D-06 | Registro de mortalidad ocurrida fuera del estado `Productivo` | M3-CU03, M3-CU07 | Módulo 1 |
 | D-07 | Grafía exacta del catálogo de estados compartido | M3-CU01, M3-CU07 | Módulo 1 |
-| D-08 | Publicación de eventos en Kafka: tópicos, sobre y campos de cada evento (M3 propone el contrato del plan 001) | M3-CU07 a M3-CU10 | Módulo 1 y Módulo 2 |
+| D-08 | Contratos REST: rutas, autenticación y campos de las consultas de M3 a M2 (M3 propone la forma del plan 001); para M1 ya están en su acuerdo de contratos | M3-CU07 a M3-CU10 | Módulo 1 y Módulo 2 |
 
 ---
 

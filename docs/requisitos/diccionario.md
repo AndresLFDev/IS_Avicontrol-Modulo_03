@@ -52,7 +52,7 @@ Reflejo local sincronizado de la infraestructura física desde Módulo 1.
 | `nombre` | `VARCHAR(100)` | NO | - | Código o nombre asignado (ej. "Galpón 1"). |
 | `aforo_maximo` | `INT` | NO | - | Capacidad máxima de aves autorizada. |
 | `estado` | `VARCHAR(30)` | NO | - | Estado operativo sincronizado (`EstadoGalpon`). |
-| `fecha_hora_sync` | `TIMESTAMPTZ` | NO | - | Momento en que M3 procesó el último evento de M1 sobre este galpón. |
+| `fecha_hora_sync` | `TIMESTAMPTZ` | NO | - | Momento de la última sincronización de este galpón con M1. |
 
 ---
 
@@ -66,23 +66,23 @@ Reflejo local sincronizado de la parvada alojada en un galpón desde Módulo 1. 
 | `nombre` | `VARCHAR(100)` | NO | - | Código del lote (ej. "Lote L-2026-A"). |
 | `fecha_ingreso` | `DATE` | NO | - | Fecha de encasetamiento de la parvada. |
 | `poblacion_inicial` | `INT` | NO | - | Cantidad inicial de aves ingresadas. |
-| `poblacion_actual` | `INT` | NO | - | Aves vivas según el último evento de M1. `0` = siniestro total. |
+| `poblacion_actual` | `INT` | NO | - | Aves vivas según la última consulta a M1. `0` = siniestro total. |
 | `costo_total_cop` | `BIGINT` | NO | - | Costo inicial de adquisición del lote de pollitos. |
 | `estado` | `VARCHAR(30)` | NO | - | Estado del lote informado por M1, sincronizado tal cual. No reemplaza la etapa que M3 deriva (CU01.FR-013). |
-| `fecha_hora_sync` | `TIMESTAMPTZ` | NO | - | Momento en que M3 procesó el último evento de M1 sobre este lote. |
+| `fecha_hora_sync` | `TIMESTAMPTZ` | NO | - | Momento de la última sincronización de este lote con M1. |
 
 ---
 
 ### D. Tabla `alerta_vaciado_sanitario` (Entidad `AlertaVaciadoSanitario` — Copia Local M1)
-Evento registrado por Módulo 1 al concluir la cosecha y desvincular el lote del galpón. Es el pivote que permite a M3 identificar qué lote está listo para liquidar (`Por Liquidar`) y cuál ya fue liquidado (`Liquidado`). Sin esta alerta, M3 no puede derivar la etapa ni habilitar la generación de la Liquidación (CU01.FR-013, CU03.FR-005).
+Vaciado sanitario que Módulo 1 acepta al desvincular el lote del galpón. M1 no lo expone: M3 lo deriva cuando el lote aparece en `lotesAnteriores` del galpón (plan 001). Es el pivote que permite a M3 identificar qué lote está listo para liquidar (`Por Liquidar`) y cuál ya fue liquidado (`Liquidado`). Sin esta alerta, M3 no puede derivar la etapa ni habilitar la generación de la Liquidación (CU01.FR-013, CU03.FR-005).
 
 | Campo | Tipo SQL | Nulo | Llave | Descripción y Regla de Negocio |
 | :--- | :--- | :--- | :--- | :--- |
 | `id_alerta` | `UUID` | NO | PK | Identificador único de la alerta generado por M1. |
 | `id_galpon` | `UUID` | NO | FK→galpon | Galpón que quedó en estado `VACIADO_SANITARIO`. |
 | `id_lote` | `UUID` | NO | UQ, FK→lote | Lote desvinculado del galpón al cierre del ciclo productivo. |
-| `fecha_hora_evento` | `TIMESTAMPTZ` | NO | - | Momento exacto en que M1 registró el vaciado sanitario. |
-| `id_registro_sincronizacion` | `BIGINT` | NO | FK→registro_sincronizacion | Evento procesado que importó la alerta; su `fecha_hora_inicio` indica cuándo se recibió. |
+| `fecha_hora_evento` | `TIMESTAMPTZ` | NO | - | Momento en que M3 detectó el vaciado; M1 no expone la hora real. |
+| `id_registro_sincronizacion` | `BIGINT` | NO | FK→registro_sincronizacion | Ejecución de la sincronización que creó la alerta; su `fecha_hora_inicio` indica cuándo se detectó. |
 
 > **Restricción**: `id_lote` es `UNIQUE`; cada lote tiene como máximo una alerta de vaciado sanitario.
 
@@ -101,7 +101,7 @@ Resultado operativo del sacrificio de un lote, base física de la Venta Bruta (C
 | `cantidad_final_pollos` | `INT` | NO | - | Pollos finales (`> 0`). Unidad indivisible con `peso_total_kg`. |
 | `peso_total_kg` | `NUMERIC(12,2)` | NO | - | Peso total en kg (`> 0`). |
 | `fecha_registro` | `TIMESTAMPTZ` | NO | - | Momento en que M2 registró el resultado. |
-| `fecha_hora_sync` | `TIMESTAMPTZ` | NO | - | Momento en que M3 procesó el último evento del resultado. |
+| `fecha_hora_sync` | `TIMESTAMPTZ` | NO | - | Momento de la última sincronización del resultado con M2. |
 | `estado_utilizacion` | `VARCHAR(20)` | NO | CHECK | `NO_UTILIZADO` o `UTILIZADO` (`EstadoUtilizacion`). Permanece `UTILIZADO` aunque la Liquidación se anule. |
 
 ---
@@ -120,7 +120,7 @@ Partida de alimento del ciclo del lote, sin valorizar (CU09).
 | `valor_impuesto_cop` | `NUMERIC(14,2)` | SI | - | Impuesto informado por M2; no se suma hasta resolver D-05. |
 | `estado_valorizacion` | `VARCHAR(20)` | NO | CHECK | `VALORIZADA` o `PENDIENTE_PRECIO` (`EstadoValorizacion`). |
 | `referencia_origen` | `VARCHAR(200)` | SI | - | Recepción o documento de origen en M2. |
-| `fecha_hora_sync` | `TIMESTAMPTZ` | NO | - | Momento en que M3 procesó el último evento de la partida. |
+| `fecha_hora_sync` | `TIMESTAMPTZ` | NO | - | Momento de la última sincronización de la partida con M2. |
 
 ---
 
@@ -136,7 +136,7 @@ Consumo de medicamento aplicado al lote (CU10).
 | `fecha_consumo` | `DATE` | NO | - | Fecha de aplicación. |
 | `cantidad_unidad_base` | `NUMERIC(12,3)` | NO | - | Cantidad total en unidad base (suma de sus tramos). |
 | `unidad_base` | `VARCHAR(30)` | NO | - | Unidad base tal como la informa M2 (`G`, `ML`, `UNIDAD`…). |
-| `fecha_hora_sync` | `TIMESTAMPTZ` | NO | - | Momento en que M3 procesó el último evento del consumo. |
+| `fecha_hora_sync` | `TIMESTAMPTZ` | NO | - | Momento de la última sincronización del consumo con M2. |
 
 ---
 
@@ -190,17 +190,17 @@ Auditoría inalterable de cancelaciones de liquidaciones activas.
 ---
 
 ### B. Tabla `registro_sincronizacion` (Entidad `RegistroSincronizacion`)
-Bitácora de los eventos Kafka procesados desde Módulo 1 y Módulo 2. Una fila por evento.
+Bitácora de las ejecuciones de la sincronización con Módulo 1 y Módulo 2. Una fila por ejecución.
 
 | Campo | Tipo SQL | Nulo | Llave | Descripción |
 | :--- | :--- | :--- | :--- | :--- |
 | `id` | `BIGSERIAL` | NO | PK | Identificador único del registro. |
 | `fuente` | `VARCHAR(20)` | NO | CHECK | Módulo emisor (`MODULO_1`, `MODULO_2`). |
-| `topico` | `VARCHAR(100)` | NO | - | Tópico Kafka del que se leyó el evento. |
-| `id_evento` | `UUID` | NO | UQ | `eventId` del sobre; garantiza que un evento se procese una sola vez. Un mensaje ilegible o sin `eventId` no crea fila: pasa directo a la DLT. |
+| `topico` | `VARCHAR(100)` | NO | - | Ruta REST consultada (por ejemplo `GET /api/v1/galpones`). |
+| `id_evento` | `UUID` | SI | UQ | Vacío en las consultas REST; se conserva porque ya existe en la migración V1. |
 | `fecha_hora_inicio` | `TIMESTAMPTZ` | NO | - | Inicio del procesamiento. |
-| `fecha_hora_fin` | `TIMESTAMPTZ` | SI | - | Fin del procesamiento. Nulo mientras el evento está `PENDIENTE_LOTE`; al aplicarse toma la hora en que se aplicó. |
-| `resultado` | `VARCHAR(20)` | SI | CHECK | `EXITOSA`, `FALLIDA` o `PENDIENTE_LOTE` (`ResultadoSincronizacion`). |
+| `fecha_hora_fin` | `TIMESTAMPTZ` | SI | - | Fin de la ejecución. Nulo mientras corre. |
+| `resultado` | `VARCHAR(20)` | SI | CHECK | `EXITOSA` o `FALLIDA` (`ResultadoSincronizacion`). |
 | `descripcion_error` | `TEXT` | SI | - | Causa del rechazo o del fallo, si ocurrió. |
 | `registros_actualizados` | `INT` | NO | - | Filas creadas o modificadas (Default: 0). |
 
@@ -222,21 +222,8 @@ Captura inmutable, por fuente, de los datos usados al liquidar. Una fila por fue
 
 ---
 
-### D. Tabla `evento_pendiente_lote` (Entidad `EventoPendienteLote`)
-Eventos de Módulo 1 o Módulo 2 que llegaron antes que su lote (Kafka no ordena entre tópicos). Se aplican y se borran cuando el lote llega por `avicontrol.m1.galpones`.
-
-| Campo | Tipo SQL | Nulo | Llave | Descripción |
-| :--- | :--- | :--- | :--- | :--- |
-| `id_evento` | `UUID` | NO | PK, FK→registro_sincronizacion(id_evento) | Evento retenido; su fila de la bitácora está `PENDIENTE_LOTE`. |
-| `id_lote` | `UUID` | NO | - | Lote esperado. Sin FK porque el lote aún no existe. |
-| `topico` | `VARCHAR(100)` | NO | - | Tópico de origen; decide cómo se aplica el evento. |
-| `payload` | `JSONB` | NO | - | Datos del evento ya validados. |
-| `fecha_hora_recepcion` | `TIMESTAMPTZ` | NO | - | Momento de llegada; los pendientes se aplican en este orden. |
-
----
-
-### E. Tabla `aviso_utilizacion_resultado` (Entidad `AvisoUtilizacionResultado`)
-Aviso saliente hacia Módulo 2 (tópico `avicontrol.m3.avisos-utilizacion`) indicando que el resultado de sacrificio fue consumido. Funciona como *outbox*.
+### D. Tabla `aviso_utilizacion_resultado` (Entidad `AvisoUtilizacionResultado`)
+Aviso saliente hacia Módulo 2 (canal acordado con M2, D-03) indicando que el resultado de sacrificio fue consumido. Funciona como *outbox*.
 
 | Campo | Tipo SQL | Nulo | Llave | Descripción |
 | :--- | :--- | :--- | :--- | :--- |
@@ -251,7 +238,7 @@ Aviso saliente hacia Módulo 2 (tópico `avicontrol.m3.avisos-utilizacion`) indi
 
 ## 3. Catálogos y Enumeraciones del Sistema
 
-Los códigos se almacenan y exponen en mayúsculas con guion bajo. La traducción desde la grafía de M1 se hace en el consumidor Kafka (D-07).
+Los códigos se almacenan y exponen en mayúsculas con guion bajo. La traducción desde la grafía de M1 se hace en el cliente REST (D-07).
 
 ### `EstadoGalpon` (Enum)
 - **`DISPONIBLE`**: Galpón sanitizado y listo para encasetar, sin lote.
@@ -279,7 +266,7 @@ Los códigos se almacenan y exponen en mayúsculas con guion bajo. La traducció
 - **`PENDIENTE_PRECIO`**: Sin precio; bloquea la liquidación (CU03.FR-006).
 
 ### `EstadoEntregaAviso` (Enum)
-- **`PENDIENTE`**: Aún no confirmado por el broker; se reintenta.
+- **`PENDIENTE`**: Aún no confirmado por Módulo 2; se reintenta.
 - **`ENTREGADO`**: Publicado y confirmado.
 
 ### `CategoriaCosto` (Enum)
@@ -292,9 +279,8 @@ Los códigos se almacenan y exponen en mayúsculas con guion bajo. La traducció
 - **`MODULO_2`**: Sistema de Operaciones, Sacrificio e Insumos.
 
 ### `ResultadoSincronizacion` (Enum)
-- **`EXITOSA`**: Evento procesado correctamente.
-- **`FALLIDA`**: Evento rechazado por contenido inválido.
-- **`PENDIENTE_LOTE`**: Evento válido cuyo lote aún no está en la copia local; espera en `evento_pendiente_lote` y pasa a `EXITOSA` o `FALLIDA` cuando llega el lote.
+- **`EXITOSA`**: Ejecución completada correctamente.
+- **`FALLIDA`**: Ejecución en la que M1 o M2 no respondieron, devolvieron un error o enviaron datos inválidos.
 
 ### `CausaNoLiquidable` (Enum, campo `causa` del error `422`)
 - **`SIN_ALERTA_VACIADO`**, **`SIN_RESULTADO_SACRIFICIO`**, **`SIN_PARTIDAS_ALIMENTO`**, **`PARTIDAS_SIN_PRECIO`**.

@@ -175,7 +175,7 @@ SELECT s.id_liquidacion, s.fuente, s.fecha_hora_sync,
 -- =====================================================================================
 -- 10. Aviso de utilización para M2
 -- Al generar una liquidación con resultado de sacrificio, el resultado pasa a UTILIZADO y se
--- crea un aviso PENDIENTE (M2 lo recibiría por Kafka; ese envío aún no está implementado).
+-- crea un aviso PENDIENTE (M2 lo recibiría por el canal que se acuerde; ese envío aún no está implementado).
 -- Si se anula y se vuelve a liquidar, el aviso original se conserva y no se duplica.
 -- En siniestro total no hay resultado, así que no se crea aviso.
 -- =====================================================================================
@@ -252,8 +252,8 @@ SELECT liq.fecha_hora_generacion, g.nombre AS galpon, l.nombre AS lote,
  ORDER BY liq.fecha_hora_generacion DESC, liq.id_liquidacion DESC;
 
 -- 13b. Bitácora de sincronización con M1 y M2. En el seed hay 7 eventos simulados, todos
---      EXITOSA. Una fila nueva aquí solo aparecería cuando se implementen los consumidores de
---      Kafka (CU07 a CU10); hoy la app no escribe en esta tabla.
+--      EXITOSA. Una fila nueva aquí solo aparecería cuando se implemente la sincronización por
+--      REST (CU07 a CU10); hoy la app no escribe en esta tabla.
 SELECT id, fuente, topico, fecha_hora_inicio, fecha_hora_fin, resultado, registros_actualizados
   FROM registro_sincronizacion
  ORDER BY id;

@@ -38,7 +38,7 @@ Cubre los escenarios 1, 3 y 4 de la User Story 1 de la spec. El escenario 2 (lot
 #### Prerequisites & Environment
 
 ##### Test Case Limitations
-* La sincronización con Módulo 1 y Módulo 2 por Kafka no está implementada: la lista usa solo los datos del seed y la bitácora de sincronización no recibe filas nuevas.
+* La sincronización con Módulo 1 y Módulo 2 por REST no está implementada: la lista usa solo los datos del seed y la bitácora de sincronización no recibe filas nuevas.
 * El paso 9 depende de la fecha del equipo: con el seed, ambas fuentes aparecen como desactualizadas porque su última sincronización es del 2026-10-20 y el umbral es de 24 horas (`sync.umbral-inactividad`).
 
 ##### Dependencies & Assumptions
@@ -129,8 +129,8 @@ SELECT g.nombre, g.estado, g.aforo_maximo, COUNT(l.id_lote) AS lotes
 
 ```sql
 -- 13b. Bitácora de sincronización con M1 y M2. En el seed hay 7 eventos simulados, todos
---      EXITOSA. Una fila nueva aquí solo aparecería cuando se implementen los consumidores de
---      Kafka (CU07 a CU10); hoy la app no escribe en esta tabla.
+--      EXITOSA. Una fila nueva aquí solo aparecería cuando se implemente la sincronización por
+--      REST (CU07 a CU10); hoy la app no escribe en esta tabla.
 SELECT id, fuente, topico, fecha_hora_inicio, fecha_hora_fin, resultado, registros_actualizados
   FROM registro_sincronizacion
  ORDER BY id;
