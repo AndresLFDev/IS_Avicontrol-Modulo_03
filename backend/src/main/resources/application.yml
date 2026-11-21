@@ -54,7 +54,16 @@ kafka:
     m3-dlt: avicontrol.m3.dlt
 
 sync:
-  umbral-inactividad: PT24H # RT-09: fuente desactualizada si no hay eventos exitosos en este lapso
+  umbral-inactividad: PT24H # RT-09: fuente desactualizada si no hay sincronización exitosa en este lapso
+  m1:
+    intervalo: ${SYNC_M1_INTERVALO:PT5M} # cada cuánto se consulta a Módulo 1
+    retraso-inicial: PT10S # espera tras arrancar antes de la primera consulta
+
+# Módulo 1 (REST de solo lectura). Sin M1_BASE_URL no se sincroniza. Ejemplo: http://18.227.58.143/api/v1
+m1:
+  base-url: ${M1_BASE_URL:}
+  timeout-conexion: PT2S
+  timeout-lectura: PT5S
 
 avisos:
   intervalo: PT1M # frecuencia de publicación de avisos de utilización pendientes
