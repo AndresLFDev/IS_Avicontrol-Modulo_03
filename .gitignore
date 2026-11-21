@@ -4,7 +4,9 @@
 
 ### Secretos ###
 .env
+.env.prod
 !.env.example
+!.env.prod.example
 
 ### Frontend ###
 node_modules/
