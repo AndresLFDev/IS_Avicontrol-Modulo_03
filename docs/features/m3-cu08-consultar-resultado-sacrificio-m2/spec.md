@@ -65,18 +65,18 @@ Como Módulo 3, quiero recibir de Módulo 2 el resultado final de sacrificio de 
 
 ### Functional Requirements
 
-- **FR-001**: El sistema MUST consultar, mediante un proceso automático en segundo plano, el REST de Módulo 2 para obtener el resultado final de sacrificio de los lotes con ciclo cerrado (contrato por confirmar, D-08).
+- **FR-001**: El sistema MUST consultar, mediante un proceso automático en segundo plano, el REST de Módulo 2 para obtener el resultado final de sacrificio de los lotes con ciclo cerrado (contrato acordado con M2, ver el [plan 001](../../planes/001-sincronizacion-m1-m2.md)).
 - **FR-002**: El sistema MUST obtener y almacenar, como una sola unidad de información: `idResultado`, `idLote`, `idGalpon`, `cantidadFinalPollos`, `pesoTotalKg` y `fechaRegistro`.
 - **FR-003**: El sistema MUST validar que `cantidadFinalPollos` sea un entero mayor que cero y que `pesoTotalKg` sea mayor que cero. Los resultados que no cumplan MUST registrarse como incidencia y NO DEBEN habilitar la generación de la Liquidación.
 - **FR-004**: El sistema MUST actualizar la copia local cuando Módulo 2 corrija un resultado que aún no haya sido consumido por ninguna Liquidación (`NO_UTILIZADO`). Si el resultado ya está `UTILIZADO`, el sistema MUST rechazar la corrección, registrarla como incidencia y conservar las cifras utilizadas, aunque la Liquidación que lo consumió se haya anulado.
 - **FR-005**: El sistema NO DEBE recalcular una Liquidación `ACTIVA` ante cambios posteriores en la copia local. El resultado final de sacrificio es definitivo desde su primera utilización (FR-004); la anulación formal (M3-CU04) corrige los datos propios de la Liquidación, como el precio por kg, pero no el resultado.
-- **FR-006**: Al persistir una Liquidación `ACTIVA` que consume un resultado final de sacrificio, el sistema MUST marcar el resultado final asociado como utilizado en su copia local y MUST publicar el aviso de utilización con el identificador del resultado por el canal acordado con Módulo 2 (D-03). Esta es la **única publicación** de M3 hacia un módulo externo en todo el módulo. Cada resultado genera un solo aviso, aunque su Liquidación se anule y se genere otra con el mismo resultado.
+- **FR-006**: Al persistir una Liquidación `ACTIVA` que consume un resultado final de sacrificio, el sistema MUST marcar el resultado final asociado como utilizado en su copia local y MUST publicar el aviso de utilización con el identificador del resultado con un `POST` REST a Módulo 2, que responde `200` con `estado = UTILIZADO` (D-03). Esta es la **única publicación** de M3 hacia un módulo externo en todo el módulo. Cada resultado genera un solo aviso, aunque su Liquidación se anule y se genere otra con el mismo resultado.
 - **FR-007**: El aviso de utilización MUST ser asíncrono e idempotente. Si su publicación falla, el sistema MUST conservar la Liquidación generada, mantener el aviso como pendiente y reintentarlo en segundo plano, sin revertir ni bloquear ninguna operación financiera completada.
 - **FR-008**: Ante la indisponibilidad de Módulo 2 (sin respuesta, tiempo agotado o error HTTP 500), el sistema MUST conservar íntegra la copia local previa, registrar el fallo y reintentar en el siguiente ciclo, sin bloquear ninguna operación de M3.
 - **FR-009**: El sistema MUST procesar las sincronizaciones de forma idempotente: recibir el mismo resultado más de una vez no DEBE crear registros duplicados.
 - **FR-010**: El sistema MUST registrar como incidencia la recepción de más de un resultado final para el mismo lote, conservando el previamente sincronizado.
 
-[NEEDS CLARIFICATION – D-03: Módulo 2 condiciona la corrección del resultado final a que Módulo 3 no lo haya utilizado, lo que requiere el aviso definido en FR-006. El canal del aviso (REST de Módulo 2 o Kafka alojado por Módulo 2), su formato y su confirmación deben acordarse con el equipo de Módulo 2 (D-03).]
+**D-03 (resuelta el 2026-11-21).** M2 recibe el aviso por REST (`POST /api/integracion/modulo3/resultados-sacrificio/utilizado`): responde `200` con `estado = UTILIZADO` después de confirmar su transacción, repetir el mismo `eventId` produce el mismo resultado y, desde ese momento, M2 rechaza corregir el resultado. M3 solo marca el aviso `ENTREGADO` con esa respuesta.
 
 ### Key Entities
 

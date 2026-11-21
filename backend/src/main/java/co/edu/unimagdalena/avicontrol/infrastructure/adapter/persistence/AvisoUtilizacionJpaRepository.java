@@ -1,6 +1,7 @@
 package co.edu.unimagdalena.avicontrol.infrastructure.adapter.persistence;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -8,6 +9,8 @@ import org.springframework.data.jpa.repository.Query;
 
 interface AvisoUtilizacionJpaRepository
     extends JpaRepository<AvisoUtilizacionResultadoEntity, Long> {
+
+  List<AvisoUtilizacionResultadoEntity> findByEstadoEntregaOrderByIdAsc(String estadoEntrega);
 
   /**
    * Inserta el aviso salvo que el resultado ya tenga uno. Se usa una sola sentencia con ON CONFLICT

@@ -66,8 +66,8 @@ Como Módulo 3, quiero recibir de Módulo 2 los consumos de medicamento aplicado
 
 ### Functional Requirements
 
-- **FR-001**: El sistema MUST consultar, mediante un proceso automático en segundo plano, el REST de Módulo 2 para obtener los consumos de medicamento aplicados a cada lote (contrato por confirmar, D-08).
-- **FR-002**: Por cada consumo, el sistema MUST obtener y almacenar: `idConsumoOrigen`, `idLote`, `idGalpon`, `medicamento`, `fechaConsumo`, `cantidadUnidadBase` y `unidadBase`.
+- **FR-001**: El sistema MUST consultar, mediante un proceso automático en segundo plano, el REST de Módulo 2 para obtener los consumos de medicamento aplicados a cada lote (contrato acordado con M2, ver el [plan 001](../../planes/001-sincronizacion-m1-m2.md)).
+- **FR-002**: Por cada consumo, el sistema MUST obtener y almacenar: `idConsumoOrigen`, `idLote`, `idGalpon`, `medicamento`, `fechaConsumo`, `cantidadUnidadBase` y `unidadBase`. `idConsumoOrigen` es el `consumoId` de M2, y la cantidad del consumo es la suma de sus tramos; las cantidades y los precios conservan los 4 decimales de M2.
 - **FR-003**: Por cada consumo, el sistema MUST obtener y almacenar el **desglose por recepción**: un tramo por cada recepción utilizada, con su cantidad, su precio histórico por unidad base, su valor de impuesto y su referencia de origen.
 - **FR-004**: El sistema NO DEBE promediar precios entre tramos de un mismo consumo. Cada tramo conserva el precio histórico de su recepción.
 - **FR-005**: El sistema NO DEBE calcular subtotales ni totales durante la sincronización. Almacena cantidad y precio unitario; la valorización corresponde a M3-CU03.

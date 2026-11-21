@@ -175,7 +175,7 @@ SELECT s.id_liquidacion, s.fuente, s.fecha_hora_sync,
 -- =====================================================================================
 -- 10. Aviso de utilización para M2
 -- Al generar una liquidación con resultado de sacrificio, el resultado pasa a UTILIZADO y se
--- crea un aviso PENDIENTE (M2 lo recibiría por el canal que se acuerde; ese envío aún no está implementado).
+-- crea un aviso PENDIENTE (con M2_BASE_URL la tarea programada lo envía a M2 por REST; en local sigue PENDIENTE).
 -- Si se anula y se vuelve a liquidar, el aviso original se conserva y no se duplica.
 -- En siniestro total no hay resultado, así que no se crea aviso.
 -- =====================================================================================
@@ -251,12 +251,13 @@ SELECT liq.fecha_hora_generacion, g.nombre AS galpon, l.nombre AS lote,
   JOIN galpon g ON g.id_galpon = liq.id_galpon
  ORDER BY liq.fecha_hora_generacion DESC, liq.id_liquidacion DESC;
 
--- 13b. Bitácora de sincronización con M1 y M2. En el seed hay 7 eventos simulados, todos
---      EXITOSA. Una fila nueva aquí solo aparecería cuando se implemente la sincronización por
---      REST (CU07 a CU10); hoy la app no escribe en esta tabla.
-SELECT id, fuente, topico, fecha_hora_inicio, fecha_hora_fin, resultado, registros_actualizados
+-- 13b. Bitácora de sincronización con M1 y M2: una fila por ejecución. resultado EXITOSA o FALLIDA;
+--      descripcion_error lleva la causa del fallo o los datos que se omitieron por inválidos.
+SELECT id, fuente, topico, fecha_hora_inicio, fecha_hora_fin, resultado, registros_actualizados,
+       descripcion_error
   FROM registro_sincronizacion
- ORDER BY id;
+ ORDER BY id DESC
+ LIMIT 20;
 
 -- 13c. Última sincronización exitosa por fuente: es lo que devuelve
 --      GET /api/v1/sincronizacion/estado.
@@ -265,3 +266,38 @@ SELECT fuente, MAX(fecha_hora_fin) AS ultima_exitosa
  WHERE resultado = 'EXITOSA' AND fecha_hora_fin IS NOT NULL
  GROUP BY fuente
  ORDER BY fuente;
+
+-- 14. Lo que M3 guardó de M2 para un lote. Sustituye el UUID por el del lote que probaste.
+SELECT 'resultado' AS dato, r.id_resultado::text AS id, r.cantidad_final_pollos::text AS cantidad,
+       r.peso_total_kg::text AS valor, r.estado_utilizacion AS estado
+  FROM resultado_final_sacrificio r WHERE r.id_lote = '00000000-0000-0000-0000-000000000000'
+UNION ALL
+SELECT 'alimento', p.id_partida_origen::text, p.cantidad_kg::text, p.precio_unitario_kg_cop::text,
+       p.estado_valorizacion
+  FROM partida_alimento_lote p WHERE p.id_lote = '00000000-0000-0000-0000-000000000000'
+UNION ALL
+SELECT 'medicamento ' || c.medicamento, t.referencia_recepcion, t.cantidad_unidad_base::text,
+       t.precio_unitario_base_cop::text, t.estado_valorizacion
+  FROM tramo_recepcion_consumo t
+  JOIN consumo_medicamento_lote c ON c.id_consumo_origen = t.id_consumo_origen
+ WHERE c.id_lote = '00000000-0000-0000-0000-000000000000';
+
+-- 15. Precisión de cantidades y precios: debe decir 18,4 en las siete columnas (migración V4).
+SELECT table_name, column_name, numeric_precision, numeric_scale
+  FROM information_schema.columns
+ WHERE table_schema = 'public'
+   AND (table_name, column_name) IN (
+       ('partida_alimento_lote', 'cantidad_kg'), ('partida_alimento_lote', 'precio_unitario_kg_cop'),
+       ('consumo_medicamento_lote', 'cantidad_unidad_base'),
+       ('tramo_recepcion_consumo', 'cantidad_unidad_base'),
+       ('tramo_recepcion_consumo', 'precio_unitario_base_cop'),
+       ('partida_costo_lote', 'cantidad'), ('partida_costo_lote', 'precio_unitario_cop'))
+ ORDER BY table_name, column_name;
+
+-- 16. Aviso de utilización de cada resultado: PENDIENTE hasta que M2 responde 200 con UTILIZADO.
+--     intentos cuenta los envíos (los fallidos y el exitoso).
+SELECT a.id_aviso, a.id_resultado, r.id_lote, r.estado_utilizacion, a.estado_entrega, a.intentos,
+       a.fecha_hora_emision
+  FROM aviso_utilizacion_resultado a
+  JOIN resultado_final_sacrificio r ON r.id_resultado = a.id_resultado
+ ORDER BY a.id_aviso;

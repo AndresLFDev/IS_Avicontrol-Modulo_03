@@ -40,7 +40,7 @@ Estos términos tienen un único significado en todo el módulo. Ninguna especif
 
 **M3 consulta a los módulos de origen; ellos no publican para M3.**
 
-1. M3 obtiene todos los datos externos **consultando el REST** de Módulo 1 y Módulo 2 con una tarea programada. Módulo 1 expone las consultas de su acuerdo de contratos; Módulo 2 expone las suyas (contrato por confirmar, D-08).
+1. M3 obtiene todos los datos externos **consultando el REST** de Módulo 1 y Módulo 2 con una tarea programada. Módulo 1 expone las consultas de su acuerdo de contratos; Módulo 2 expone las suyas (contrato acordado, D-08: ver el plan 001).
 2. M3 persiste el resultado de cada consulta en su **copia local sincronizada**, junto con la fecha y hora de la sincronización.
 3. **Ninguna operación funcional de M3 requiere comunicación en vivo.** Las operaciones leen la copia local. Si Módulo 1 o Módulo 2 no responden, M3 opera con la última copia local y muestra su antigüedad.
 4. M3 **no escribe** en Módulo 1 ni en Módulo 2. Su única entrega hacia otro módulo es el aviso de utilización del resultado final de sacrificio declarado en M3-CU08, por el canal que acuerde con Módulo 2 (D-03).
@@ -144,12 +144,12 @@ Estas decisiones bloquean la implementación y deben resolverse en mesa conjunta
 | :--- | :--- | :--- | :--- |
 | D-01 | Criterio de costeo del alimento: compras, consumo real o requerimiento proyectado | M3-CU03, M3-CU09 | Módulo 2 |
 | D-02 | Exposición formal de población inicial, población actual, costo del lote, estado y alerta de vaciado sanitario | M3-CU07 | Módulo 1 |
-| D-03 | Formato y confirmación del aviso de utilización del resultado final de sacrificio (el canal, REST de M2 o Kafka alojado por M2, se acuerda con M2), y que Módulo 2 no corrija un resultado ya avisado: para M3 es definitivo aunque la Liquidación se anule | M3-CU08 | Módulo 2 |
+| D-03 | **Resuelta (2026-11-21).** Aviso de utilización del resultado final de sacrificio: M2 lo recibe por REST (`POST` a su servicio de integración), responde `200` idempotente por `eventId` y, desde ese momento, no corrige el resultado; para M3 es definitivo aunque la Liquidación se anule | M3-CU08 | Módulo 2 |
 | D-04 | Ruta de estado para liquidar un lote con mortalidad total | M3-CU03, M3-CU07 | Módulo 1 |
 | D-05 | Tratamiento del impuesto informado por Módulo 2: ¿los costos operativos se calculan sobre valor neto o con impuesto? | M3-CU03, M3-CU09, M3-CU10 | Módulo 2 |
 | D-06 | Registro de mortalidad ocurrida fuera del estado `Productivo` | M3-CU03, M3-CU07 | Módulo 1 |
 | D-07 | Grafía exacta del catálogo de estados compartido | M3-CU01, M3-CU07 | Módulo 1 |
-| D-08 | Contratos REST: rutas, autenticación y campos de las consultas de M3 a M2 (M3 propone la forma del plan 001); para M1 ya están en su acuerdo de contratos | M3-CU07 a M3-CU10 | Módulo 1 y Módulo 2 |
+| D-08 | **Resuelta (2026-11-21).** Contratos REST: rutas, autenticación y campos de las consultas de M3 a M2 (M2 los documenta en su integración con M3 y autoriza por IP, sin usuario ni clave; el plan 001 los traduce); para M1 están en su acuerdo de contratos | M3-CU07 a M3-CU10 | Módulo 1 y Módulo 2 |
 
 ---
 

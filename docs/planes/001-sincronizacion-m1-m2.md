@@ -23,7 +23,7 @@ Este subsistema mantiene la **copia local sincronizada** de M3 consultando por *
 - **Testing**: JUnit 5 y Mockito (servicios), servidor HTTP simulado con los JSON del acuerdo (adaptadores REST), Spring Boot Test + Testcontainers con PostgreSQL
 - **Target Platform**: JVM 21 / Docker
 - **Project Type**: Backend service (capa de sincronización e integración)
-- **Configuración**: `M1_BASE_URL` (por ejemplo `http://18.227.58.143/api/v1`), `SYNC_M1_INTERVALO` (por defecto `PT5M`); para M2, `M2_BASE_URL`, `M2_USUARIO` y `M2_CLAVE`. Ninguna va en el código.
+- **Configuración**: `M1_BASE_URL` (por ejemplo `http://18.227.58.143/api/v1`), `SYNC_M1_INTERVALO` (por defecto `PT5M`); para M2, `M2_BASE_URL` (por ejemplo `https://3.21.155.197/api/integracion/modulo3`) y `SYNC_M2_INTERVALO` (por defecto `PT5M`). M2 autoriza a M3 por su IP de salida (`52.15.95.91`), así que no hay usuario ni clave de M2. Ninguna va en el código.
 - **Performance Goals**: una sincronización completa de M1 con pocos galpones en menos de 10 s; tiempos máximos de 2 s de conexión y 5 s de lectura por consulta, sin reintentos dentro de una misma consulta (el siguiente ciclo reintenta)
 
 ---
@@ -102,72 +102,74 @@ Según el acuerdo de M1, un lote deja de ser activo únicamente cuando M1 acepta
 
 ---
 
-## Contratos con Módulo 2 (REST, por confirmar — D-08)
+## Contratos con Módulo 2 (REST, acordados con M2)
 
-M2 todavía no publica para M3. M3 propone consultar por lote, solo los lotes con alerta de vaciado y sin Liquidación activa. Los `payload` siguientes son la **forma que M3 necesita**; los endpoints, la autenticación (Basic hoy) y los campos que hoy faltan se acuerdan con M2. Endpoints actuales de M2 que cubren parte de esto: `GET /api/ordenes-sacrificio/{ordenId}/resultados`, `GET /api/lotes/{loteId}/consumos-medicamento` y `GET /api/lotes/{loteId}/alimento-requerido`.
+Fuente: [integración de M2 con M3](https://github.com/OscarHernandez123/AviControlMod2/blob/develop/docs/integracion-modulo3-rest-kafka.md) (PR #29 de M2). M3 consulta por lote, solo los lotes con alerta de vaciado y sin Liquidación `ACTIVA`, y solo después de sincronizar M1. No hay usuario ni clave: M2 deja pasar la IP de salida de M3 por HTTPS. Los precios y las cantidades tienen 4 decimales en M2 y también en M3 (migración V4, SC-07).
+
+| Consulta | Ruta (sobre `M2_BASE_URL`) | Sin datos |
+|---|---|---|
+| Resultado final | `GET /lotes/{loteId}/resultado-sacrificio` | `404` con `code = RECURSO_NO_ENCONTRADO`: no es un error (M3 lo ignora hasta que M2 lo registre). Un `404` sin ese código sí es un error |
+| Alimento | `GET /lotes/{loteId}/alimentos` | `200` con `partidas: []` |
+| Medicamento | `GET /lotes/{loteId}/medicamentos` | `200` con `partidas: []` |
+
+La lista vacía no acredita que el lote exista en M2.
 
 ### D. Resultado de sacrificio (CU08)
 
 ```json
-{
-  "idResultado": "456e7890-e89b-12d3-a456-426614174000",
-  "idLote": "98765432-e89b-12d3-a456-426614174000",
-  "idGalpon": "123e4567-e89b-12d3-a456-426614174000",
-  "cantidadFinalPollos": 8500,
-  "pesoTotalKg": 23800.00,
-  "fechaRegistro": "2026-09-25T18:00:00-05:00"
-}
+{ "id": "22222222-2222-4222-8222-222222222222", "ordenId": "…", "galponId": "…", "loteId": "7331eec8-e447-4868-bdef-8eca3fff8d44",
+  "cantidadFinalPollos": 1974, "pesoTotalKg": 4012.50, "estado": "REGISTRADO",
+  "fechaRegistro": "2026-11-20T18:30:00Z", "fechaCorreccion": null }
 ```
+
+M3 guarda `id`, `cantidadFinalPollos`, `pesoTotalKg` y `fechaRegistro` en `resultado_final_sacrificio`. El galpón de la fila es el del lote en la copia local (no el `galponId` de M2, para no romper la clave foránea). Si el lote ya tiene un resultado con otro `id`, se conserva el primero y se anota una incidencia (CU08.FR-010); si tiene el mismo `id` y está `UTILIZADO`, no se toca (CU08.FR-004).
 
 ### E. Partidas de alimento (CU09)
 
+Una partida por **suministro y recepción**: un suministro que abarca dos recepciones llega como dos partidas con precios distintos y no se consolida.
+
 ```json
-{
-  "idPartida": "777e4567-e89b-12d3-a456-426614174000",
-  "idLote": "98765432-e89b-12d3-a456-426614174000",
-  "idGalpon": "123e4567-e89b-12d3-a456-426614174000",
-  "tipoAlimento": "Engorde",
-  "cantidadKg": 12500.000,
-  "precioUnitarioKgCop": 2400.00,
-  "valorImpuestoCop": 1500000.00,
-  "referenciaOrigen": "REC-2026-118"
-}
+{ "suministroId": "5a00…0001", "recepcionId": "6b00…0001", "nombreAlimento": "Inicio Premium", "tipoAlimento": "INICIO",
+  "cantidadKg": 2.0000, "precioNetoKg": 10.0000, "impuestoPorcentaje": 19.0000,
+  "valorImpuestoCop": 3.80, "valorImpuestoRecepcionCop": 190.00, "moneda": "COP", "datosCompletos": true }
 ```
 
-`precioUnitarioKgCop` puede faltar: la partida se guarda con `estado_valorizacion = 'PENDIENTE_PRECIO'` (CU09.FR-005).
+- `id_partida_origen` = UUID determinista de `("alimento:" + suministroId + ":" + recepcionId)`: el mismo par siempre da el mismo id y no se duplica.
+- `tipo_alimento` = `tipoAlimento`, o `nombreAlimento` si falta; `referencia_origen` = `recepción {recepcionId} {nombreAlimento}`.
+- `precioNetoKg` → `precio_unitario_kg_cop`; si falta, la partida queda `PENDIENTE_PRECIO` (CU09.FR-005).
+- `valorImpuestoCop` (impuesto de ESTE tramo) → `valor_impuesto_cop`; no se suma al costo mientras D-05 siga abierta. `valorImpuestoRecepcionCop` y `impuestoPorcentaje` son informativos y M3 los ignora.
 
 ### F. Consumos de medicamento (CU10)
 
+Un elemento por **consumo y recepción**; M3 los agrupa por `consumoId` sin promediar precios.
+
 ```json
-{
-  "idConsumo": "333e4567-e89b-12d3-a456-426614174000",
-  "idLote": "98765432-e89b-12d3-a456-426614174000",
-  "idGalpon": "123e4567-e89b-12d3-a456-426614174000",
-  "medicamento": "Amoxicilina",
-  "fechaConsumo": "2026-08-20",
-  "cantidadUnidadBase": 50.000,
-  "unidadBase": "ML",
-  "tramos": [
-    { "referenciaRecepcion": "REC-2026-090", "cantidadUnidadBase": 30.000, "precioUnitarioBaseCop": 20000.00, "valorImpuestoCop": 30000.00 },
-    { "referenciaRecepcion": "REC-2026-101", "cantidadUnidadBase": 20.000, "precioUnitarioBaseCop": 21000.00, "valorImpuestoCop": 21000.00 }
-  ]
-}
+{ "consumoId": "7c00…0001", "recepcionId": "6b00…0001", "medicamentoId": "8d00…0001", "nombreMedicamento": "Enrofloxacina",
+  "fechaAplicacion": "2026-11-12", "cantidadUnidadBase": 120.5000, "unidadBase": "ML",
+  "precioNetoHistoricoUnidadBase": 0.0333, "valorImpuestoCop": 0.76, "datosCompletos": true }
 ```
 
-M2 entrega cantidad y precio por tramo, nunca un total en pesos (RT-07). Un tramo sin `precioUnitarioBaseCop` se guarda `PENDIENTE_PRECIO` (CU10.FR-006). Al reprocesar un consumo se reemplazan sus tramos.
+- `consumo_medicamento_lote`: `id_consumo_origen` = `consumoId`, `medicamento` = `nombreMedicamento` (si falta, `Medicamento {medicamentoId}`, sin inventar un nombre), `cantidad_unidad_base` = suma de sus tramos, `fecha_consumo` = `fechaAplicacion`.
+- `tramo_recepcion_consumo`: `referencia_recepcion` = `recepcionId`, cantidad, `precioNetoHistoricoUnidadBase` → `precio_unitario_base_cop` y `valorImpuestoCop`; sin precio, `PENDIENTE_PRECIO` (CU10.FR-006).
+- Un consumo con un tramo inválido (cantidad `<= 0`, recepción repetida, unidades distintas, sin fecha) se omite **completo** y se informa: guardar solo algunos tramos haría que la Liquidación cobrara de menos sin avisar.
 
 ### G. Aviso de utilización (CU08, saliente M3 → M2)
 
-```json
-{
-  "idResultado": "456e7890-e89b-12d3-a456-426614174000",
-  "idLote": "98765432-e89b-12d3-a456-426614174000",
-  "idLiquidacion": 42,
-  "fechaHoraUtilizacion": "2026-10-03T11:00:00Z"
-}
+```http
+POST {M2_BASE_URL}/resultados-sacrificio/utilizado
+{ "eventId": "…", "eventType": "ResultadoSacrificioUtilizado", "eventVersion": 1,
+  "aggregateId": "<idResultado>", "payload": { "resultadoId": "<idResultado>", "loteId": "<idLote>" } }
 ```
 
-El canal (REST con un `POST` a M2, o un tópico de Kafka alojado por M2) se acuerda con M2 (D-03). M1 no participa. Hoy el consumidor de M2 espera el tópico `modulo3.resultado-sacrificio-utilizado.v1` con el sobre `eventId`, `eventType`, `eventVersion`, `aggregateId` y `payload{resultadoId, loteId}`; si el canal es Kafka, M3 enviará exactamente ese sobre.
+Todos los campos son obligatorios y `aggregateId` debe coincidir con `payload.resultadoId`. M2 responde `200` con `{eventId, resultadoId, loteId, estado: "UTILIZADO"}` después de confirmar su transacción; desde ahí bloquea la corrección del resultado.
+
+| HTTP | Significado | Qué hace M3 |
+|---|---|---|
+| 200 | Confirmación aplicada o ya registrada | Marca el aviso `ENTREGADO` (solo si `estado = UTILIZADO` y el `resultadoId` coincide) |
+| 400, 403, 404, 409 | Contrato inválido, IP no autorizada, resultado inexistente o de otro lote | Sigue `PENDIENTE`, cuenta el intento y lo deja en el registro; no se trata como aceptado |
+| Tiempo agotado, red o 5xx | La respuesta puede haberse perdido después del commit | Sigue `PENDIENTE` y reintenta con el mismo `eventId` y el mismo cuerpo |
+
+`eventId` = UUID determinista de `("aviso-resultado-utilizado:" + idResultado)`, así que cada reintento es idéntico y M2 lo trata como el mismo aviso. M1 no participa.
 
 ### Validaciones de contenido (ejecución `FALLIDA` o elemento omitido, sin reintento)
 
@@ -177,7 +179,7 @@ El canal (REST con un `POST` a M2, o un tópico de Kafka alojado por M2) se acue
 | Lote | Sin `poblacionInicial`, `costoTotal <= 0` o `poblacionActual > poblacionInicial` | CU07.FR-011 |
 | Resultado | `cantidadFinalPollos <= 0`, `pesoTotalKg <= 0` o ausentes; ya existe otro resultado para el lote | CU08.FR-003, FR-010 |
 | Resultado (corrección) | El resultado existente ya está `UTILIZADO`, aunque su Liquidación se haya anulado (se registra incidencia y no se actualiza) | CU08.FR-004, FR-005 |
-| Partida / consumo | Falta `idLote` o cantidad `<= 0` | CU09, CU10 |
+| Partida / consumo | Falta `suministroId`, `recepcionId` o `consumoId`; cantidad `<= 0`; precio o impuesto negativo; un consumo con un tramo inválido se omite completo | CU09, CU10 |
 
 **Lote inexistente.** Con REST no hay orden de llegada: M3 sincroniza primero galpones y lotes de M1, y solo después consulta a M2 los lotes que ya existen en la copia local. Por eso no hay eventos "pendientes de lote" ni la tabla `evento_pendiente_lote`.
 
@@ -305,27 +307,27 @@ public class PublicarAvisosUtilizacionService {
 
 ## Phase 2: CU07 – Sincronización M1 (Galpones, Lotes y Alertas)
 
-- [ ] **T007** Unit Test `SyncModulo1ServiceTest.java`: alta y actualización de galpón y lote, población inicial sin cambios en actualizaciones, lote desvinculado conservado, alerta derivada nueva e idempotente, galpón sin lote activo, galpón que M1 ya no devuelve (404, la copia no se borra), datos inválidos omitidos sin sobrescribir, M1 caído (ejecución `FALLIDA` y copia intacta).
-- [ ] **T008** Implementar `SincronizarModulo1UseCase`, `SyncModulo1Service.java` y el puerto `ConsultarGalponesM1`.
-- [ ] **T009** Integration Test `ClienteM1RestIT.java` (servidor HTTP simulado con los JSON del acuerdo) e implementación de `ClienteM1Rest.java`, incluida la paginación con `page`, el `200` sin `loteActivo` y los errores `problem+json`.
-- [ ] **T009b** Implementar `SincronizacionM1Job.java` y la configuración `sync.m1.intervalo` y `m1.base-url`.
+- [x] **T007** Unit Test `SyncModulo1ServiceTest.java`: alta y actualización de galpón y lote, población inicial sin cambios en actualizaciones, lote desvinculado conservado, alerta derivada nueva e idempotente, galpón sin lote activo, galpón que M1 ya no devuelve (404, la copia no se borra), datos inválidos omitidos sin sobrescribir, M1 caído (ejecución `FALLIDA` y copia intacta).
+- [x] **T008** Implementar `SincronizarModulo1UseCase`, `SyncModulo1Service.java` y el puerto `ConsultarGalponesM1`.
+- [x] **T009** Integration Test `ClienteM1RestIT.java` (servidor HTTP simulado con los JSON del acuerdo) e implementación de `ClienteM1Rest.java`, incluida la paginación con `page`, el `200` sin `loteActivo` y los errores `problem+json`.
+- [x] **T009b** Implementar `SincronizacionM1Job.java` y la configuración `sync.m1.intervalo` y `m1.base-url`.
 
 ---
 
 ## Phase 3: CU08 – Resultado de Sacrificio y Aviso de Utilización
 
-- [ ] **T010** Unit Test `SyncModulo2ServiceTest.java` (resultado): resultado válido, inválido, corrección antes de ser utilizado, corrección rechazada después de ser utilizado (también si la Liquidación se anuló), segundo resultado para el mismo lote.
-- [ ] **T011** Implementar `sincronizarLote` en `SyncModulo2Service.java` para el resultado. Depende de la respuesta de M2 (D-08).
-- [ ] **T012** Unit Test `PublicarAvisosUtilizacionServiceTest.java`: entrega exitosa, fallo que deja el aviso `PENDIENTE` e incrementa `intentos`.
-- [ ] **T013** Implementar `PublicarAvisosUtilizacionService.java`, el puerto `AvisoUtilizacionPublisher` y el adaptador del canal acordado con M2 (D-03). La creación del aviso en la misma transacción de la Liquidación se implementa en el plan 003 (T009).
+- [x] **T010** Unit Test `SyncModulo2ServiceTest.java` (resultado): resultado válido, inválido, corrección antes de ser utilizado, corrección rechazada después de ser utilizado (también si la Liquidación se anuló), segundo resultado para el mismo lote.
+- [x] **T011** Implementar `sincronizarLote` en `SyncModulo2Service.java` para el resultado. Depende de la respuesta de M2 (D-08).
+- [x] **T012** Unit Test `PublicarAvisosM2ServiceTest.java`: entrega exitosa, fallo que deja el aviso `PENDIENTE` e incrementa `intentos`.
+- [x] **T013** Implementar `PublicarAvisosM2Service.java` (puerto `ConfirmarUtilizacionM2`, implementado por `ClienteM2Rest`) y `PublicacionAvisosM2Job.java`: `POST` REST acordado con M2 (D-03), `eventId` determinista y reintento con el mismo cuerpo. La creación del aviso en la misma transacción de la Liquidación se implementa en el plan 003 (T009).
 
 ---
 
 ## Phase 4: CU09 y CU10 – Alimento y Medicamentos
 
-- [ ] **T014** Unit Tests de `SyncModulo2Service` para partidas de alimento (valorizada, `PENDIENTE_PRECIO`, idempotencia) y consumos de medicamento (uno y varios tramos, tramo sin precio, reemplazo de tramos al reprocesar).
-- [ ] **T015** Implementar la parte de alimento y medicamento de `sincronizarLote`.
-- [ ] **T016** Integration Test `ClienteM2RestIT.java` e implementación de `ClienteM2Rest.java` (Basic Auth con `M2_USUARIO` y `M2_CLAVE`).
+- [x] **T014** Unit Tests de `SyncModulo2Service` para partidas de alimento (valorizada, `PENDIENTE_PRECIO`, idempotencia) y consumos de medicamento (uno y varios tramos, tramo sin precio, reemplazo de tramos al reprocesar).
+- [x] **T015** Implementar la parte de alimento y medicamento de `sincronizarLote`.
+- [x] **T016** Integration Test `ClienteM2RestIT.java` e implementación de `ClienteM2Rest.java` (sin credenciales: M2 autoriza por IP; solo un `404` con `RECURSO_NO_ENCONTRADO` cuenta como "sin resultado"). Implementado con `ClienteM2RestTest` y `M2Simulado`.
 
 ---
 

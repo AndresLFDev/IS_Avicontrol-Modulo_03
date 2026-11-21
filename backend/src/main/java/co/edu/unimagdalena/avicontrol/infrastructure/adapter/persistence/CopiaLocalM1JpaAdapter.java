@@ -28,7 +28,14 @@ public class CopiaLocalM1JpaAdapter implements CopiaLocalM1Repository {
   @Transactional
   public void guardarGalpon(
       UUID idGalpon, String nombre, int aforoMaximo, String estado, Instant ahora) {
-    var galpon = galpones.findById(idGalpon).orElseGet(GalponEntity::new);
+    var existente = galpones.findById(idGalpon);
+    var galpon = existente.orElseGet(GalponEntity::new);
+    if (existente.isPresent()
+        && galpon.nombre.equals(nombre)
+        && galpon.aforoMaximo == aforoMaximo
+        && galpon.estado.equals(estado)) {
+      return; // sin cambios: fecha_hora_sync solo avanza cuando los datos cambian
+    }
     galpon.idGalpon = idGalpon;
     galpon.nombre = nombre;
     galpon.aforoMaximo = aforoMaximo;
@@ -49,7 +56,19 @@ public class CopiaLocalM1JpaAdapter implements CopiaLocalM1Repository {
       long costoTotalCop,
       String estado,
       Instant ahora) {
-    var lote = lotes.findById(idLote).orElseGet(LoteEntity::new);
+    // Con el galpón cargado: un proxy perezoso no deja leer sus campos de paquete
+    var existente = lotes.findConGalpon(idLote);
+    var lote = existente.orElseGet(LoteEntity::new);
+    if (existente.isPresent()
+        && lote.galpon.idGalpon.equals(idGalpon)
+        && lote.nombre.equals(nombre)
+        && lote.fechaIngreso.equals(fechaIngreso)
+        && lote.poblacionInicial == poblacionInicial
+        && lote.poblacionActual == poblacionActual
+        && lote.costoTotalCop == costoTotalCop
+        && lote.estado.equals(estado)) {
+      return; // sin cambios: fecha_hora_sync solo avanza cuando los datos cambian
+    }
     lote.idLote = idLote;
     lote.galpon = galpones.getReferenceById(idGalpon);
     lote.nombre = nombre;

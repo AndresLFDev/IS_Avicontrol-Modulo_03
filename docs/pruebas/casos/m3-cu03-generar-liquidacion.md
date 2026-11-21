@@ -37,7 +37,7 @@ This test case verifies that **la generación de la liquidación de un lote** (`
 #### Prerequisites & Environment
 
 ##### Test Case Limitations
-* El aviso de utilización se guarda como `PENDIENTE` en la base, pero no se publica a Módulo 2: el envío no está implementado.
+* El aviso de utilización se guarda como `PENDIENTE` en la base. En local (con `M2_BASE_URL` vacía) no se envía a Módulo 2; con M2 configurado lo envía la tarea programada y se comprueba en [TC-M3-CU07-CU10](m3-cu07-a-cu10-sincronizacion.md).
 * La pantalla no deja probar por sí sola algunos casos: el lote sin alerta de vaciado tiene el botón deshabilitado y el lote inexistente no tiene botón. Esos pasos se hacen con Swagger (<http://localhost:8080/swagger-ui.html>) o con una llamada a la API.
 * El paso 4 de la Sección 4 usa dos pestañas para simular a dos usuarios que actúan casi al mismo tiempo.
 
@@ -244,7 +244,7 @@ SELECT s.id_liquidacion, s.fuente, s.fecha_hora_sync,
 ```sql
 -- 10. Aviso de utilización para M2
 -- Al generar una liquidación con resultado de sacrificio, el resultado pasa a UTILIZADO y se
--- crea un aviso PENDIENTE (M2 lo recibiría por el canal que se acuerde; ese envío aún no está implementado).
+-- crea un aviso PENDIENTE (con M2_BASE_URL la tarea programada lo envía a M2 por REST; en local sigue PENDIENTE).
 -- Si se anula y se vuelve a liquidar, el aviso original se conserva y no se duplica.
 -- En siniestro total no hay resultado, así que no se crea aviso.
 SELECT r.id_resultado, l.nombre AS lote, r.estado_utilizacion,
