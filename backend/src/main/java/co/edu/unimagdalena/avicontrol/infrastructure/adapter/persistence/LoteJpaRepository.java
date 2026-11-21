@@ -1,5 +1,7 @@
 package co.edu.unimagdalena.avicontrol.infrastructure.adapter.persistence;
 
+import co.edu.unimagdalena.avicontrol.domain.port.in.dto.sync.LoteConsultableM2;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -73,6 +75,21 @@ interface LoteJpaRepository extends JpaRepository<LoteEntity, UUID> {
           + ETAPA
           + ") <> 'LIQUIDADO'")
   boolean existeAlgunoListable();
+
+  /**
+   * Lotes sobre los que hay que consultar a M2: con alerta de vaciado (los únicos liquidables) y
+   * sin Liquidación ACTIVA.
+   */
+  @Query(
+      "SELECT new co.edu.unimagdalena.avicontrol.domain.port.in.dto.sync.LoteConsultableM2("
+          + "l.idLote, g.idGalpon)"
+          + " FROM LoteEntity l JOIN l.galpon g"
+          + " WHERE EXISTS (SELECT a.idAlerta FROM AlertaVaciadoSanitarioEntity a"
+          + " WHERE a.idLote = l.idLote)"
+          + " AND NOT EXISTS (SELECT liq.id FROM LiquidacionEntity liq WHERE liq.idLote = l.idLote"
+          + " AND liq.estado = co.edu.unimagdalena.avicontrol.domain.model.EstadoLiquidacion.ACTIVA)"
+          + " ORDER BY l.fechaIngreso, l.idLote")
+  List<LoteConsultableM2> findConsultablesM2();
 
   /** Solo el nombre: evita leer campos de un proxy perezoso ya presente en la sesión. */
   @Query("SELECT l.nombre FROM LoteEntity l WHERE l.idLote = :idLote")

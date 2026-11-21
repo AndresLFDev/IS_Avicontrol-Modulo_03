@@ -23,7 +23,7 @@ Este documento define la arquitectura, las tecnologías, el modelo de datos rela
 | Persistencia | Spring Data JPA + Hibernate | Repositorios y entidades JPA |
 | Base de datos | PostgreSQL 16 en todos los perfiles | Copia local sincronizada y liquidaciones. No se usa H2: no soporta el índice único parcial `uq_lote_activa` |
 | Migraciones | Flyway (`flyway-core`, `flyway-database-postgresql`) | Versionamiento y aplicación ordenada del esquema SQL |
-| Integración inter-módulos | `RestClient` (Spring Web) + `@Scheduled` | Consultas REST a Módulo 1 y Módulo 2 que llenan la copia local (SC-06). El aviso de utilización hacia Módulo 2 usa el canal que acuerde M2 (REST o Kafka, D-03) |
+| Integración inter-módulos | `RestClient` (Spring Web) + `@Scheduled` | Consultas REST a Módulo 1 y Módulo 2 que llenan la copia local (SC-06). El aviso de utilización hacia Módulo 2 se envía por REST (`POST` a M2, ver sección D) |
 | Exportación de reportes | Apache POI `poi-ooxml:5.5.1` | Generación de reportes Excel (CU05) |
 | Serialización | Jackson 3 (paquete `tools.jackson`) | JSON para API REST y para las respuestas de M1 y M2 |
 | Documentación API | OpenAPI 3 (`springdoc-openapi` 3.x) | Descripción interactiva de endpoints en `/swagger-ui.html` |
@@ -32,7 +32,7 @@ Este documento define la arquitectura, las tecnologías, el modelo de datos rela
 | Utilidades | Lombok | Reducción de código repetitivo (solo en `infrastructure`) |
 | Calidad y arquitectura | Spotless y ArchUnit | Formato uniforme y verificación de límites entre capas |
 | Observabilidad | Spring Boot Actuator y Micrometer | Salud (`/actuator/health`, incluye la base de datos) y métricas operativas |
-| Entorno local | Docker Compose | PostgreSQL para desarrollo local (el `compose.yaml` conserva Kafka para probar el aviso de utilización) |
+| Entorno local | Docker Compose | PostgreSQL para desarrollo local (el `compose.yaml` aún levanta Kafka, que M3 ya no usa: ver PENDIENTES) |
 | Abstracción de tiempo | `java.time.Clock` | Fecha/hora inyectada para auditabilidad y pruebas deterministas |
 
 ### Comandos de construcción
@@ -165,7 +165,7 @@ La plataforma **no tiene login** ni gestión de usuarios. No se usa Spring Secur
 
 Convenciones:
 - Fechas y horas en `TIMESTAMPTZ` (Java `Instant`). Los filtros por fecha del API se interpretan en la zona `America/Bogota`.
-- Montos totales COP en `BIGINT`; precios unitarios en `NUMERIC(14,2)`.
+- Montos totales COP en `BIGINT`; precios unitarios en `NUMERIC(14,2)`, salvo las cantidades y los precios unitarios que entrega Módulo 2, que son `NUMERIC(18,4)` como en M2 (migración V4): redondear antes de multiplicar haría que el costo no coincidiera con el de M2.
 - Los códigos de enum se almacenan en mayúsculas con guion bajo (`EN_COSECHA`, `ACTIVA`). La grafía que use Módulo 1 se traduce en el cliente REST (D-07).
 
 ### A. Diagrama Entidad-Relación (DER en Mermaid)
@@ -425,8 +425,8 @@ CREATE TABLE partida_alimento_lote (
     id_lote                UUID          NOT NULL REFERENCES lote(id_lote),
     id_galpon              UUID          NOT NULL REFERENCES galpon(id_galpon),
     tipo_alimento          VARCHAR(50)   NOT NULL,
-    cantidad_kg            NUMERIC(12,3) NOT NULL,
-    precio_unitario_kg_cop NUMERIC(14,2),
+    cantidad_kg            NUMERIC(18,4) NOT NULL,
+    precio_unitario_kg_cop NUMERIC(18,4),
     valor_impuesto_cop     NUMERIC(14,2),
     estado_valorizacion    VARCHAR(20)   NOT NULL DEFAULT 'VALORIZADA',
     referencia_origen      VARCHAR(200),
@@ -440,7 +440,7 @@ CREATE TABLE consumo_medicamento_lote (
     id_galpon            UUID          NOT NULL REFERENCES galpon(id_galpon),
     medicamento          VARCHAR(150)  NOT NULL,
     fecha_consumo        DATE          NOT NULL,
-    cantidad_unidad_base NUMERIC(12,3) NOT NULL,
+    cantidad_unidad_base NUMERIC(18,4) NOT NULL,
     unidad_base          VARCHAR(30)   NOT NULL,
     fecha_hora_sync      TIMESTAMPTZ   NOT NULL
 );
@@ -449,8 +449,8 @@ CREATE TABLE tramo_recepcion_consumo (
     id_tramo                 BIGSERIAL PRIMARY KEY,
     id_consumo_origen        UUID          NOT NULL REFERENCES consumo_medicamento_lote(id_consumo_origen),
     referencia_recepcion     VARCHAR(200)  NOT NULL,
-    cantidad_unidad_base     NUMERIC(12,3) NOT NULL,
-    precio_unitario_base_cop NUMERIC(14,2),
+    cantidad_unidad_base     NUMERIC(18,4) NOT NULL,
+    precio_unitario_base_cop NUMERIC(18,4),
     valor_impuesto_cop       NUMERIC(14,2),
     estado_valorizacion      VARCHAR(20)   NOT NULL DEFAULT 'VALORIZADA',
     CONSTRAINT uq_tramo_recepcion UNIQUE (id_consumo_origen, referencia_recepcion),
@@ -490,9 +490,9 @@ CREATE TABLE partida_costo_lote (
     id_lote             UUID          NOT NULL REFERENCES lote(id_lote),
     categoria           VARCHAR(20)   NOT NULL,
     concepto            VARCHAR(200)  NOT NULL,
-    cantidad            NUMERIC(12,3) NOT NULL,
+    cantidad            NUMERIC(18,4) NOT NULL,
     unidad_medida       VARCHAR(30)   NOT NULL,
-    precio_unitario_cop NUMERIC(14,2) NOT NULL,
+    precio_unitario_cop NUMERIC(18,4) NOT NULL,
     subtotal_cop        BIGINT        NOT NULL,
     fuente_origen       VARCHAR(20)   NOT NULL,
     referencia_origen   VARCHAR(200),
@@ -562,10 +562,10 @@ M3 se integra con los demás módulos **consultando su REST** con una tarea prog
 | M1 | `GET /api/v1/galpones?page={n}` (tamaño fijo de 10) | CU07 | Acordado: [acuerdo de contratos de M1](https://github.com/AviControl-org/AVICONTROL/blob/develop/avicontrol/docs/plan-general/acuerdo-contratos-entre-modulos.md) |
 | M1 | `GET /api/v1/galpones/{id}` (galpón y `loteActivo`, opcional) | CU07 | Acordado |
 | M1 | `GET /api/v1/galpones/{id}/lotes` (`loteActivo` y `lotesAnteriores`) | CU07 | Acordado |
-| M2 | Resultado final de sacrificio por lote | CU08 | Por confirmar con M2 (D-08) |
-| M2 | Partidas de alimento por lote | CU09 | Por confirmar con M2 (D-08) |
-| M2 | Consumos de medicamento por lote, con tramos | CU10 | Por confirmar con M2 (D-08) |
-| M3 → M2 | Aviso de utilización del resultado de sacrificio | CU08 | Canal por confirmar con M2 (D-03) |
+| M2 | `GET {M2_BASE_URL}/lotes/{loteId}/resultado-sacrificio` | CU08 | Acordado: [integración de M2 con M3](https://github.com/OscarHernandez123/AviControlMod2/blob/develop/docs/integracion-modulo3-rest-kafka.md) |
+| M2 | `GET {M2_BASE_URL}/lotes/{loteId}/alimentos` (una partida por suministro y recepción) | CU09 | Acordado |
+| M2 | `GET {M2_BASE_URL}/lotes/{loteId}/medicamentos` (un tramo por consumo y recepción) | CU10 | Acordado |
+| M3 → M2 | `POST {M2_BASE_URL}/resultados-sacrificio/utilizado` (aviso de utilización) | CU08 | Acordado (D-03) |
 
 Los `payload` y las respuestas están en el [plan 001](../planes/001-sincronizacion-m1-m2.md#contratos-con-módulo-1-rest-según-su-acuerdo).
 
@@ -595,8 +595,9 @@ Las direcciones y claves se leen del entorno y nunca van en el código ni en el 
 ### D. Aviso de utilización (patrón *outbox*)
 
 1. Al persistir una Liquidación que consume un resultado de sacrificio, **en la misma transacción** se marca el resultado como `UTILIZADO` y, si ese resultado aún no tiene aviso, se inserta una fila `PENDIENTE` en `aviso_utilizacion_resultado`.
-2. `PublicarAvisosUtilizacionService` (`@Scheduled(fixedDelayString = "${avisos.intervalo:PT1M}")`) entrega los avisos `PENDIENTE` a M2 por el canal acordado (D-03). Si M2 confirma, el aviso pasa a `ENTREGADO`; si falla, sigue `PENDIENTE` y se incrementa `intentos`.
+2. `PublicarAvisosUtilizacionService` (`@Scheduled(fixedDelayString = "${avisos.intervalo:PT1M}")`) entrega los avisos `PENDIENTE` a M2 con un `POST` REST. Solo si M2 responde `200` con `estado = UTILIZADO` el aviso pasa a `ENTREGADO`; ante cualquier otra respuesta, un tiempo agotado o un fallo de red sigue `PENDIENTE` y se incrementa `intentos`.
 3. Un fallo del aviso nunca revierte ni bloquea la Liquidación (CU08.FR-007). Anular la Liquidación no retira el aviso.
+4. El `eventId` del aviso es un UUID determinista calculado del `idResultado`: cada reintento (también tras reiniciar M3) lleva exactamente el mismo cuerpo, y M2 responde `200` igual, con un solo efecto. Por eso `aviso_utilizacion_resultado` no necesita una columna para el identificador.
 
 ### E. Exportación a Excel con Apache POI (`poi-ooxml:5.5.1`)
 - **Construcción del Libro**: Uso de `XSSFWorkbook` con una hoja para la Matriz de Venta Final y el Desglose por Categorías (`ALIMENTO`, `MEDICINA`, `POBLACION`).
@@ -745,6 +746,6 @@ La Liquidación solo tiene dos estados: `ACTIVA` y `ANULADA`. La vista previa no
 
 ## Desarrollo y Pruebas sin Módulo 1 ni Módulo 2
 
-- **Perfil `dev`**: Docker Compose levanta PostgreSQL (y Kafka, para probar el aviso de utilización). Flyway aplica `db/migration` y además `db/seed` con galpones, lotes, alertas, resultados y partidas de demostración, de modo que la API funciona sin que M1 ni M2 respondan. En producción (`prod`) no se aplica el seed: la copia local la llena la sincronización.
+- **Perfil `dev`**: Docker Compose levanta PostgreSQL (y Kafka, que M3 ya no usa: ver PENDIENTES). Flyway aplica `db/migration` y además `db/seed` con galpones, lotes, alertas, resultados y partidas de demostración, de modo que la API funciona sin que M1 ni M2 respondan. En producción (`prod`) no se aplica el seed: la copia local la llena la sincronización.
 - **Pruebas de integración**: Testcontainers levanta PostgreSQL; un servidor HTTP simulado responde con los JSON de `src/test/resources/fixtures/m1/` y `fixtures/m2/` y las pruebas verifican la copia local resultante.
 - **Pruebas unitarias**: los puertos `port/out` se simulan con Mockito; no se necesita M1, M2 ni base de datos.

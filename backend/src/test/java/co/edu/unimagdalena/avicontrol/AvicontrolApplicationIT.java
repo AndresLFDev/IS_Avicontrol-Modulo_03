@@ -35,12 +35,30 @@ class AvicontrolApplicationIT {
   @Autowired private JdbcTemplate jdbc;
 
   @Test
-  void aplicaLasMigracionesV1aV3() {
+  void aplicaLasMigracionesV1aV4() {
     var versiones =
         jdbc.queryForList(
             "SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank",
             String.class);
-    assertThat(versiones).containsExactly("1", "2", "3");
+    assertThat(versiones).containsExactly("1", "2", "3", "4");
+  }
+
+  @Test
+  void laV4AmpliaLaPrecisionDeCantidadesYPreciosALaDeModulo2() {
+    var columnas =
+        jdbc.queryForList(
+            "SELECT table_name || '.' || column_name || ':' || numeric_precision || ','"
+                + " || numeric_scale FROM information_schema.columns"
+                + " WHERE table_schema = 'public' AND ((table_name, column_name) IN ("
+                + "('partida_alimento_lote','cantidad_kg'),"
+                + "('partida_alimento_lote','precio_unitario_kg_cop'),"
+                + "('consumo_medicamento_lote','cantidad_unidad_base'),"
+                + "('tramo_recepcion_consumo','cantidad_unidad_base'),"
+                + "('tramo_recepcion_consumo','precio_unitario_base_cop'),"
+                + "('partida_costo_lote','cantidad'),"
+                + "('partida_costo_lote','precio_unitario_cop')))",
+            String.class);
+    assertThat(columnas).hasSize(7).allSatisfy(c -> assertThat(c).endsWith(":18,4"));
   }
 
   @Test

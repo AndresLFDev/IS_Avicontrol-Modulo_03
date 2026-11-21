@@ -133,6 +133,29 @@ class SincronizacionM1IT {
   }
 
   @Test
+  void repetirNoRenuevaLaFechaDeSincronizacionDeLoQueNoCambio() {
+    sincronizar.sincronizar();
+    String antes =
+        jdbc.queryForObject(
+            "SELECT (SELECT string_agg(fecha_hora_sync::text, ',' ORDER BY id_lote) FROM lote)"
+                + " || '|' || (SELECT string_agg(fecha_hora_sync::text, ',' ORDER BY id_galpon)"
+                + " FROM galpon)",
+            String.class);
+
+    sincronizar.sincronizar();
+
+    String despues =
+        jdbc.queryForObject(
+            "SELECT (SELECT string_agg(fecha_hora_sync::text, ',' ORDER BY id_lote) FROM lote)"
+                + " || '|' || (SELECT string_agg(fecha_hora_sync::text, ',' ORDER BY id_galpon)"
+                + " FROM galpon)",
+            String.class);
+    // La huella de la Liquidación incluye esta fecha: si cambiara en cada ciclo, una vista previa
+    // se invalidaría sola a los pocos minutos
+    assertThat(despues).isEqualTo(antes);
+  }
+
+  @Test
   void actualizaLaPoblacionCuandoM1LaCambia() {
     sincronizar.sincronizar();
     M1.responder(

@@ -115,8 +115,8 @@ Partida de alimento del ciclo del lote, sin valorizar (CU09).
 | `id_lote` | `UUID` | NO | FK→lote | Lote al que se imputa. |
 | `id_galpon` | `UUID` | NO | FK→galpon | Galpón del lote. |
 | `tipo_alimento` | `VARCHAR(50)` | NO | - | Pre-inicio, Inicio, Engorde, etc. |
-| `cantidad_kg` | `NUMERIC(12,3)` | NO | - | Cantidad en kilogramos (criterio pendiente, D-01). |
-| `precio_unitario_kg_cop` | `NUMERIC(14,2)` | SI | - | Precio neto por kg. Nulo = partida pendiente de precio. |
+| `cantidad_kg` | `NUMERIC(18,4)` | NO | - | Cantidad en kilogramos (criterio pendiente, D-01). |
+| `precio_unitario_kg_cop` | `NUMERIC(18,4)` | SI | - | Precio neto por kg. Nulo = partida pendiente de precio. |
 | `valor_impuesto_cop` | `NUMERIC(14,2)` | SI | - | Impuesto informado por M2; no se suma hasta resolver D-05. |
 | `estado_valorizacion` | `VARCHAR(20)` | NO | CHECK | `VALORIZADA` o `PENDIENTE_PRECIO` (`EstadoValorizacion`). |
 | `referencia_origen` | `VARCHAR(200)` | SI | - | Recepción o documento de origen en M2. |
@@ -134,7 +134,7 @@ Consumo de medicamento aplicado al lote (CU10).
 | `id_galpon` | `UUID` | NO | FK→galpon | Galpón del lote. |
 | `medicamento` | `VARCHAR(150)` | NO | - | Nombre del medicamento o vacuna. |
 | `fecha_consumo` | `DATE` | NO | - | Fecha de aplicación. |
-| `cantidad_unidad_base` | `NUMERIC(12,3)` | NO | - | Cantidad total en unidad base (suma de sus tramos). |
+| `cantidad_unidad_base` | `NUMERIC(18,4)` | NO | - | Cantidad total en unidad base (suma de sus tramos). |
 | `unidad_base` | `VARCHAR(30)` | NO | - | Unidad base tal como la informa M2 (`G`, `ML`, `UNIDAD`…). |
 | `fecha_hora_sync` | `TIMESTAMPTZ` | NO | - | Momento de la última sincronización del consumo con M2. |
 
@@ -148,8 +148,8 @@ Porción de un consumo abastecida por una recepción, con su precio histórico (
 | `id_tramo` | `BIGSERIAL` | NO | PK | Identificador interno del tramo. |
 | `id_consumo_origen` | `UUID` | NO | FK→consumo_medicamento_lote | Consumo al que pertenece. `UNIQUE (id_consumo_origen, referencia_recepcion)`. |
 | `referencia_recepcion` | `VARCHAR(200)` | NO | - | Recepción de M2 que abasteció el tramo. |
-| `cantidad_unidad_base` | `NUMERIC(12,3)` | NO | - | Cantidad del tramo en unidad base. |
-| `precio_unitario_base_cop` | `NUMERIC(14,2)` | SI | - | Precio histórico por unidad base. Nulo = tramo pendiente de precio. |
+| `cantidad_unidad_base` | `NUMERIC(18,4)` | NO | - | Cantidad del tramo en unidad base. |
+| `precio_unitario_base_cop` | `NUMERIC(18,4)` | SI | - | Precio histórico por unidad base. Nulo = tramo pendiente de precio. |
 | `valor_impuesto_cop` | `NUMERIC(14,2)` | SI | - | Impuesto informado por M2 (D-05). |
 | `estado_valorizacion` | `VARCHAR(20)` | NO | CHECK | `VALORIZADA` o `PENDIENTE_PRECIO`. |
 
@@ -165,9 +165,9 @@ Detalle de las partidas de gasto **congeladas** al generar una liquidación. Las
 | `id_lote` | `UUID` | NO | FK→lote | Lote evaluado. |
 | `categoria` | `VARCHAR(20)` | NO | CHECK | `ALIMENTO`, `MEDICINA` o `POBLACION` (`CategoriaCosto`). |
 | `concepto` | `VARCHAR(200)` | NO | - | Nombre del ítem (ej. "Engorde", "Amoxicilina", "Costo de adquisición del lote (9000 aves)"). |
-| `cantidad` | `NUMERIC(12,3)` | NO | - | Cantidad en la unidad de medida. |
+| `cantidad` | `NUMERIC(18,4)` | NO | - | Cantidad en la unidad de medida. |
 | `unidad_medida` | `VARCHAR(30)` | NO | - | `KG` (alimento), unidad base de M2 (medicina) o `LOTE` (población). |
-| `precio_unitario_cop` | `NUMERIC(14,2)` | NO | - | Precio unitario aplicado. |
+| `precio_unitario_cop` | `NUMERIC(18,4)` | NO | - | Precio unitario aplicado. |
 | `subtotal_cop` | `BIGINT` | NO | - | `HALF_UP(cantidad × precio_unitario_cop)`; en `POBLACION` es exactamente `costo_total_cop`. |
 | `fuente_origen` | `VARCHAR(20)` | NO | CHECK | Módulo emisor (`MODULO_1`, `MODULO_2`). |
 | `referencia_origen` | `VARCHAR(200)` | SI | - | UUID o código de transacción origen. |

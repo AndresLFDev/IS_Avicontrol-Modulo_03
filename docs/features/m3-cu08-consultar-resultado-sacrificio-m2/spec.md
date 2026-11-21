@@ -76,7 +76,7 @@ Como Módulo 3, quiero recibir de Módulo 2 el resultado final de sacrificio de 
 - **FR-009**: El sistema MUST procesar las sincronizaciones de forma idempotente: recibir el mismo resultado más de una vez no DEBE crear registros duplicados.
 - **FR-010**: El sistema MUST registrar como incidencia la recepción de más de un resultado final para el mismo lote, conservando el previamente sincronizado.
 
-[NEEDS CLARIFICATION – D-03: Módulo 2 condiciona la corrección del resultado final a que Módulo 3 no lo haya utilizado, lo que requiere el aviso definido en FR-006. El canal del aviso (REST de Módulo 2 o Kafka alojado por Módulo 2), su formato y su confirmación deben acordarse con el equipo de Módulo 2 (D-03).]
+**D-03 (resuelta el 2026-11-21).** M2 recibe el aviso por REST (`POST /api/integracion/modulo3/resultados-sacrificio/utilizado`): responde `200` con `estado = UTILIZADO` después de confirmar su transacción, repetir el mismo `eventId` produce el mismo resultado y, desde ese momento, M2 rechaza corregir el resultado. M3 solo marca el aviso `ENTREGADO` con esa respuesta.
 
 ### Key Entities
 
